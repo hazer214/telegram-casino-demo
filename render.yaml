@@ -1,0 +1,26 @@
+# Render Blueprint для Telegram Mini App казино
+# После подключения репозитория к Render автоматически создаст Web Service.
+
+services:
+  - type: web
+    name: telegram-casino-demo
+    env: python
+    plan: free
+    region: frankfurt
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn server.app:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false  # задаётся вручную в панели Render
+      - key: WEBAPP_URL
+        sync: false  # после деплоя скопировать URL сервиса
+      - key: PORT
+        value: 8000
+      - key: START_BALANCE
+        value: 10000
+      - key: CLAIM_COOLDOWN_SECONDS
+        value: 3600
+      - key: PYTHONUNBUFFERED
+        value: "true"
+    healthCheckPath: /
+    autoDeploy: true

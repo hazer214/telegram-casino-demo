@@ -1,0 +1,9 @@
+# Зависимости Python для Telegram Mini App казино
+aiogram==3.18.0
+python-dotenv==1.0.1
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+python-multipart==0.0.20
+cryptography==44.0.0
+sqlalchemy==2.0.36
