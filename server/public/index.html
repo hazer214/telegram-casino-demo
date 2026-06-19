@@ -2060,10 +2060,19 @@
         });
 
         // Старт
-        setTimeout(() => {
+        try {
             initTelegramUser();
+        } catch (e) {
+            console.error('initTelegramUser fatal:', e);
+        }
+        setTimeout(() => {
+            console.log('Starting loadProfile...');
             loadProfile();
-        }, 300);
+        }, 100);
+        setTimeout(() => {
+            console.log('Retry loadProfile...');
+            loadProfile();
+        }, 1500);
         setInterval(() => loadProfile(), 30000);
 
         document.getElementById('forceReloadBtn')?.addEventListener('click', () => {
