@@ -413,7 +413,7 @@ async def spin_lucky(
 
 @app.post("/api/lucky/start")
 async def lucky_start(
-    req: SlotsRequest,
+    req: LuckyJetStartRequest,
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -522,14 +522,14 @@ async def lucky_cashout(
     }
 
 
-class SlotsRequest(BaseModel):
+class SlotsSpinRequest(BaseModel):
     """Запрос на вращение слотов."""
     bet_amount: int = Field(..., ge=1, description="Сумма ставки")
 
 
 @app.post("/api/slots/spin")
 async def spin_slots(
-    req: SlotsRequest,
+    req: SlotsSpinRequest,
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
