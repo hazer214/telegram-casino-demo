@@ -971,7 +971,7 @@
 
     <!-- Кнопка гамбургер (всегда видна) -->
     <button class="hamburger" id="hamburger" aria-label="Открыть меню">
-        <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
     </button>
 
     <!-- Затемнение фона при открытом меню -->
@@ -1289,16 +1289,24 @@
             };
 
             const initials = getInitials(state.user.first_name);
-            const avatarHTML = state.user.photo_url
-                ? `&lt;img src="${state.user.photo_url}" alt="avatar"&gt;`
-                : initials;
+            let avatarHTML;
+            if (state.user.photo_url && state.user.photo_url.startsWith('http')) {
+                // Используем фото из Telegram с fallback на инициалы при ошибке загрузки
+                avatarHTML = `&lt;img src="${state.user.photo_url}" alt="avatar" onerror="this.parentElement.textContent='${initials}'; this.remove();"&gt;`;
+            } else {
+                avatarHTML = initials;
+            }
 
             dashboardAvatar.innerHTML = avatarHTML;
             dashboardName.textContent = state.user.first_name;
         }
 
         function getInitials(name) {
-            return name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
+            if (!name || typeof name !== 'string') return 'ИГ';
+            const parts = name.trim().split(/\s+/).filter(Boolean);
+            if (parts.length === 0) return 'ИГ';
+            if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+            return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
         }
 
         // API
