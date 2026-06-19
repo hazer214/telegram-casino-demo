@@ -1056,6 +1056,11 @@
                 <div class="balance-value" id="dashboardBalance">0 TSC</div>
             </div>
 
+            <div id="debugPanel" style="margin-top: 12px; padding: 10px; background: rgba(255,0,0,0.1); border-radius: 8px; font-size: 11px; color: var(--text-muted); word-break: break-all;">
+                Debug: initData: ...
+            </div>
+            <button class="btn btn-outline" id="forceReloadBtn" style="margin-top: 10px; padding: 10px 16px; font-size: 13px;">🔄 Обновить профиль</button>
+
             <button class="earn-btn" id="earnBtn">
                 <svg viewBox="0 0 24 24"><path d="M12 2l2.4 7.2h7.6l-6 4.8 2.4 7.2-6-4.8-6 4.8 2.4-7.2-6-4.8h7.6z"/></svg>
                 Заработать
@@ -1310,7 +1315,9 @@
 
         // Telegram user
         function initTelegramUser() {
-            console.log('Telegram initData length:', tg.initData?.length || 0);
+            const initDataLen = tg.initData?.length || 0;
+            const userPreview = tg.initDataUnsafe?.user ? tg.initDataUnsafe.user.first_name : 'none';
+            console.log('Telegram initData length:', initDataLen);
             console.log('Telegram initDataUnsafe.user:', tg.initDataUnsafe?.user);
 
             const raw = tg.initDataUnsafe?.user || {};
@@ -1323,6 +1330,8 @@
                 username: raw.username || '',
                 photo_url: raw.photo_url || ''
             };
+
+            updateDebugPanel(`initData: ${initDataLen} chars, user: ${userPreview}, id: ${state.user.id}`);
 
             const initials = getInitials(state.user.first_name);
             let avatarHTML;
@@ -1345,11 +1354,17 @@
             return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
         }
 
+        function updateDebugPanel(text) {
+            const panel = document.getElementById('debugPanel');
+            if (panel) panel.textContent = 'Debug: ' + text;
+        }
+
         // API
         async function api(endpoint, options = {}) {
             // В режиме разработки (без Telegram) отправляем пустой заголовок,
             // сервер создаст демо-пользователя
-            const initData = tg.initData || (location.search.includes('dev=1') ? '' : tg.initData);
+            const initData = tg.initData || '';
+            updateDebugPanel(`sending initData: ${initData.length} chars`);
             const response = await fetch(`${state.baseApiUrl}${endpoint}`, {
                 ...options,
                 headers: {
@@ -1428,23 +1443,25 @@
         });
 
         // Профиль
-        async function loadProfile() {
+        async function loadProfile(retry = 0) {
             try {
                 const profile = await api('/api/user/profile');
                 state.balance = profile.balance;
+                state.balanceLoaded = true;
                 renderBalance();
-                // Загружаем историю только если мы на экране с историей
                 if (document.getElementById('screen-roulette').classList.contains('active')) {
                     loadHistory('roulette', rouletteHistoryEl);
                 }
+                updateDebugPanel(`profile loaded: ${state.user.first_name}, balance: ${profile.balance}`);
             } catch (err) {
                 console.error('loadProfile error:', err);
-                // Показываем toast только если профиль ещё не загружен
-                if (!state.balanceLoaded) {
+                updateDebugPanel(`profile error: ${err.message} (retry ${retry})`);
+                if (retry < 3) {
+                    setTimeout(() => loadProfile(retry + 1), 1500);
+                } else if (!state.balanceLoaded) {
                     showToast('Не удалось загрузить профиль');
+                    state.balanceLoaded = true;
                 }
-            } finally {
-                state.balanceLoaded = true;
             }
         }
 
@@ -2025,6 +2042,11 @@
         initTelegramUser();
         loadProfile();
         setInterval(loadProfile, 30000);
+
+        document.getElementById('forceReloadBtn')?.addEventListener('click', () => {
+            initTelegramUser();
+            loadProfile();
+        });
     </script>
 </body>
 </html>
