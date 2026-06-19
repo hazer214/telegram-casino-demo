@@ -1315,23 +1315,38 @@
 
         // Telegram user
         function initTelegramUser() {
-            const initDataLen = tg.initData?.length || 0;
-            const userPreview = tg.initDataUnsafe?.user ? tg.initDataUnsafe.user.first_name : 'none';
-            console.log('Telegram initData length:', initDataLen);
-            console.log('Telegram initDataUnsafe.user:', tg.initDataUnsafe?.user);
+            const initData = tg.initData || '';
+            const initDataUnsafe = tg.initDataUnsafe || {};
+            const initDataLen = initData.length;
+            const user = initDataUnsafe.user;
+            const userPreview = user ? user.first_name : 'none';
 
-            const raw = tg.initDataUnsafe?.user || {};
-            if (!raw.id) {
-                console.warn('Telegram user data missing! Falling back to demo mode.');
+            console.log('=== Telegram WebApp Debug ===');
+            console.log('initData length:', initDataLen);
+            console.log('initData preview:', initData.slice(0, 100));
+            console.log('initDataUnsafe:', initDataUnsafe);
+            console.log('user:', user);
+            console.log('version:', tg.version);
+            console.log('platform:', tg.platform);
+
+            if (!user || !user.id) {
+                console.warn('Telegram user data missing!');
+                updateDebugPanel(`⚠️ initData=${initDataLen} chars, user=${userPreview}. Откройте через кнопку бота.`);
+                // Показываем fallback UI
+                dashboardName.textContent = 'Игрок';
+                dashboardAvatar.innerHTML = 'ИГ';
+                state.user = { id: 0, first_name: 'Игрок', username: '', photo_url: '' };
+                return;
             }
+
             state.user = {
-                id: raw.id || 0,
-                first_name: raw.first_name || 'Игрок',
-                username: raw.username || '',
-                photo_url: raw.photo_url || ''
+                id: user.id,
+                first_name: user.first_name || 'Игрок',
+                username: user.username || '',
+                photo_url: user.photo_url || ''
             };
 
-            updateDebugPanel(`initData: ${initDataLen} chars, user: ${userPreview}, id: ${state.user.id}`);
+            updateDebugPanel(`initData: ${initDataLen} chars, user: ${state.user.first_name}, id: ${state.user.id}`);
 
             const initials = getInitials(state.user.first_name);
             let avatarHTML;
@@ -1361,8 +1376,6 @@
 
         // API
         async function api(endpoint, options = {}) {
-            // В режиме разработки (без Telegram) отправляем пустой заголовок,
-            // сервер создаст демо-пользователя
             const initData = tg.initData || '';
             updateDebugPanel(`sending initData: ${initData.length} chars`);
             const response = await fetch(`${state.baseApiUrl}${endpoint}`, {
@@ -1375,7 +1388,9 @@
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-                throw new Error(data.detail?.message || data.detail || 'Ошибка сервера');
+                const errMsg = data.detail?.message || data.detail || `Ошибка сервера ${response.status}`;
+                updateDebugPanel(`error ${response.status}: ${errMsg}`);
+                throw new Error(errMsg);
             }
             return data;
         }
