@@ -789,13 +789,21 @@
         /* Lucky Jet */
         .crash-canvas {
             width: 100%;
-            height: 240px;
+            height: 260px;
             background: linear-gradient(180deg, rgba(10,8,20,0.95), rgba(20,16,38,0.98));
             border: 1px solid rgba(157, 78, 221, 0.2);
             border-radius: var(--radius);
             margin-bottom: 16px;
             position: relative;
             overflow: hidden;
+        }
+
+        .lucky-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
         }
 
         .crash-canvas::before {
@@ -811,22 +819,32 @@
 
         .crash-multiplier {
             position: absolute;
-            top: 50%;
+            top: 14px;
             left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 42px;
+            transform: translateX(-50%);
+            font-size: 38px;
             font-weight: 900;
             color: var(--accent-cyan);
             text-shadow: var(--shadow-cyan);
+            z-index: 10;
         }
 
-        .jet-icon {
+        .crash-status {
             position: absolute;
-            left: 20%;
-            top: 60%;
-            font-size: 36px;
-            filter: drop-shadow(0 0 8px var(--accent-cyan));
-            transition: all 0.1s linear;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 26px;
+            font-weight: 900;
+            color: var(--danger);
+            text-shadow: 0 0 20px rgba(255, 0, 80, 0.6);
+            z-index: 20;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .crash-status.show {
+            opacity: 1;
         }
 
         /* Slots */
@@ -1114,9 +1132,10 @@
                 </div>
             </div>
 
-            <div class="crash-canvas">
+            <div class="crash-canvas" id="luckyCanvasContainer">
+                <canvas id="luckyCanvas" class="lucky-canvas"></canvas>
                 <div class="crash-multiplier" id="crashMultiplier">1.00x</div>
-                <div class="jet-icon" id="jetIcon">🚀</div>
+                <div class="crash-status" id="crashStatus"></div>
             </div>
 
             <div class="game-card">
@@ -1596,16 +1615,263 @@
             });
         }
 
-        // Lucky Jet — серверная версия
+        // Lucky Jet — Canvas версия
+        const luckyCanvas = document.getElementById('luckyCanvas');
+        const luckyCtx = luckyCanvas.getContext('2d');
+        const crashStatusEl = document.getElementById('crashStatus');
+
+        function resizeLuckyCanvas() {
+            const rect = luckyCanvas.getBoundingClientRect();
+            luckyCanvas.width = rect.width;
+            luckyCanvas.height = rect.height;
+        }
+        resizeLuckyCanvas();
+        window.addEventListener('resize', resizeLuckyCanvas);
+
+        // Звёзды и пыль для фона
+        const stars = [];
+        for (let i = 0; i < 80; i++) {
+            stars.push({
+                x: Math.random(),
+                y: Math.random(),
+                size: 0.5 + Math.random() * 2,
+                speed: 0.2 + Math.random() * 0.8,
+                alpha: 0.2 + Math.random() * 0.8
+            });
+        }
+
         let luckyRunning = false;
         let luckyMultiplier = 1.0;
-        let luckyInterval;
+        let luckyAnimId = null;
         let luckyRoundId = null;
         let luckyCrashMultiplier = 1.0;
         let luckyBet = 0;
-        const luckyPlayBtn = document.getElementById('luckyPlayBtn');
-        const crashMultiplierEl = document.getElementById('crashMultiplier');
-        const jetIcon = document.getElementById('jetIcon');
+        let luckyStartTime = 0;
+        let luckyCrashed = false;
+        let luckyRocket = {
+            x: 0.12, // относительные координаты 0..1
+            y: 0.75,
+            phase: 0,
+            hover: 0
+        };
+        let luckyBgOffsetX = 0;
+        let luckyBgOffsetY = 0;
+
+        function drawLuckyBackground(multiplier) {
+            const w = luckyCanvas.width;
+            const h = luckyCanvas.height;
+            const ctx = luckyCtx;
+
+            // Очистка
+            const grad = ctx.createLinearGradient(0, 0, 0, h);
+            grad.addColorStop(0, 'rgba(10,8,20,0.95)');
+            grad.addColorStop(1, 'rgba(20,16,38,0.98)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, w, h);
+
+            // Скорость фона растёт с коэффициентом
+            const speed = Math.max(0.3, (multiplier - 1) * 0.35 + 0.3);
+            luckyBgOffsetX += speed * 1.2;
+            luckyBgOffsetY += speed * 0.7;
+
+            // Рисуем сетку
+            ctx.strokeStyle = 'rgba(157, 78, 221, 0.12)';
+            ctx.lineWidth = 1;
+            const gridSize = 40;
+            const offX = -(luckyBgOffsetX % gridSize);
+            const offY = -(luckyBgOffsetY % gridSize);
+
+            for (let x = offX; x < w; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, h);
+                ctx.stroke();
+            }
+            for (let y = offY; y < h; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(w, y);
+                ctx.stroke();
+            }
+
+            // Рисуем звёзды
+            stars.forEach(star => {
+                let sx = (star.x * w - luckyBgOffsetX * star.speed * 0.5) % w;
+                let sy = (star.y * h + luckyBgOffsetY * star.speed * 0.3) % h;
+                if (sx < 0) sx += w;
+                if (sy < 0) sy += h;
+                ctx.fillStyle = `rgba(200, 220, 255, ${star.alpha})`;
+                ctx.beginPath();
+                ctx.arc(sx, sy, star.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Горизонтальная линия снизу
+            ctx.strokeStyle = 'rgba(0, 245, 255, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = 'rgba(0, 245, 255, 0.5)';
+            ctx.beginPath();
+            ctx.moveTo(0, h - 1);
+            ctx.lineTo(w, h - 1);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        function drawRocket(x, y, angle, scale = 1) {
+            const ctx = luckyCtx;
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            ctx.scale(scale, scale);
+
+            // След пламени
+            const flameLength = 25 + Math.random() * 10;
+            const grad = ctx.createLinearGradient(-20, 0, -20 - flameLength, 0);
+            grad.addColorStop(0, 'rgba(0, 245, 255, 0.8)');
+            grad.addColorStop(0.5, 'rgba(157, 78, 221, 0.5)');
+            grad.addColorStop(1, 'rgba(255, 0, 80, 0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.moveTo(-14, -6);
+            ctx.lineTo(-14 - flameLength, 0);
+            ctx.lineTo(-14, 6);
+            ctx.fill();
+
+            // Корпус ракеты
+            ctx.fillStyle = '#e0e0ff';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 22, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Кабина
+            ctx.fillStyle = 'rgba(0, 245, 255, 0.9)';
+            ctx.beginPath();
+            ctx.arc(10, -2, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Крылья
+            ctx.fillStyle = '#9d4edd';
+            ctx.beginPath();
+            ctx.moveTo(-8, 6);
+            ctx.lineTo(-16, 16);
+            ctx.lineTo(-4, 10);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(-8, -6);
+            ctx.lineTo(-16, -16);
+            ctx.lineTo(-4, -10);
+            ctx.fill();
+
+            // Свечение
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = 'rgba(0, 245, 255, 0.7)';
+            ctx.strokeStyle = 'rgba(0, 245, 255, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 24, 12, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            ctx.restore();
+        }
+
+        function animateLucky(timestamp) {
+            if (!luckyRunning && !luckyCrashed) {
+                drawLuckyBackground(1.0);
+                // Рисуем ракету в стартовой позиции
+                drawRocket(luckyCanvas.width * 0.12, luckyCanvas.height * 0.75, -0.3, 1);
+                return;
+            }
+
+            if (!luckyStartTime) luckyStartTime = timestamp;
+            const elapsed = (timestamp - luckyStartTime) / 1000; // секунды
+
+            // Рост коэффициента: экспоненциальный, как в Crash-играх
+            const targetMult = luckyCrashed ? luckyCrashMultiplier : Math.min(1.0 + elapsed * 0.25, luckyCrashMultiplier);
+            luckyMultiplier = targetMult;
+
+            // Фаза 1: взлёт по экспоненте (первые ~2 секунды)
+            // Фаза 2: фиксация в правой части + покачивание
+            const w = luckyCanvas.width;
+            const h = luckyCanvas.height;
+
+            let rx, ry, angle;
+            const ascentDuration = 2.2;
+
+            if (luckyCrashed) {
+                // Резкий улет в правый верхний угол
+                const crashProgress = Math.min(1, (timestamp - luckyCrashTime) / 250);
+                rx = w * (0.72 + crashProgress * 0.45);
+                ry = h * (0.42 - crashProgress * 0.6);
+                angle = -0.55 - crashProgress * 0.5;
+                drawLuckyBackground(luckyMultiplier);
+                drawRocket(rx, ry, angle, 1 - crashProgress * 0.3);
+                if (crashProgress < 1) {
+                    luckyAnimId = requestAnimationFrame(animateLucky);
+                }
+                return;
+            }
+
+            if (elapsed < ascentDuration) {
+                const t = elapsed / ascentDuration;
+                // Экспонента: сначала медленно, потом быстро
+                const exp = 1 - Math.exp(-t * 3.5);
+                rx = w * (0.12 + exp * 0.60);
+                ry = h * (0.75 - exp * 0.40);
+                angle = -0.3 - exp * 0.25;
+            } else {
+                // Фиксированная позиция справа + динамическое покачивание
+                const hoverT = elapsed - ascentDuration;
+                luckyRocket.hover += 0.08;
+                luckyRocket.phase += 0.06;
+                rx = w * (0.72 + Math.sin(luckyRocket.phase) * 0.04);
+                ry = h * (0.35 + Math.cos(luckyRocket.hover) * 0.05 + Math.sin(luckyRocket.phase * 1.7) * 0.03);
+                angle = -0.55 + Math.sin(luckyRocket.phase) * 0.08;
+            }
+
+            luckyRocket.x = rx / w;
+            luckyRocket.y = ry / h;
+
+            drawLuckyBackground(luckyMultiplier);
+            drawRocket(rx, ry, angle, 1 + Math.max(0, (luckyMultiplier - 1) * 0.015));
+
+            crashMultiplierEl.textContent = luckyMultiplier.toFixed(2) + 'x';
+
+            if (luckyMultiplier >= luckyCrashMultiplier) {
+                // Взрыв!
+                triggerCrash();
+            } else {
+                luckyAnimId = requestAnimationFrame(animateLucky);
+            }
+        }
+
+        function triggerCrash() {
+            luckyCrashed = true;
+            luckyCrashTime = performance.now();
+            crashMultiplierEl.textContent = 'ВЗРЫВ 💥 ' + luckyCrashMultiplier.toFixed(2) + 'x';
+            crashStatusEl.textContent = 'Улетела!';
+            crashStatusEl.classList.add('show');
+            showToast('Реактор взорвался! Ставка сгорела');
+            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+            finishLucky(0);
+        }
+
+        function resetLuckyCanvas() {
+            luckyRunning = false;
+            luckyCrashed = false;
+            luckyStartTime = 0;
+            luckyMultiplier = 1.0;
+            luckyRocket = { x: 0.12, y: 0.75, phase: 0, hover: 0 };
+            luckyBgOffsetX = 0;
+            luckyBgOffsetY = 0;
+            crashStatusEl.classList.remove('show');
+            crashStatusEl.textContent = '';
+            crashMultiplierEl.textContent = '1.00x';
+            if (luckyAnimId) cancelAnimationFrame(luckyAnimId);
+            drawLuckyBackground(1.0);
+            drawRocket(luckyCanvas.width * 0.12, luckyCanvas.height * 0.75, -0.3, 1);
+        }
 
         async function finishLucky(targetMultiplier) {
             if (!luckyRoundId) return;
@@ -1620,15 +1886,17 @@
                     crashMultiplierEl.textContent = 'ЗАБРАНО ' + targetMultiplier.toFixed(2) + 'x';
                     showToast(`Забрано ${formatMoney(result.win_amount)} TSC при x${targetMultiplier.toFixed(2)}`);
                     if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-                } else {
-                    crashMultiplierEl.textContent = 'ВЗРЫВ 💥 ' + result.crash_multiplier.toFixed(2) + 'x';
-                    showToast('Реактор взорвался! Ставка сгорела');
-                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+                    // Остановить анимацию на мгновение победы
+                    luckyRunning = false;
+                    if (luckyAnimId) cancelAnimationFrame(luckyAnimId);
+                } else if (!luckyCrashed) {
+                    // Ручной cashout не успел — взрыв
+                    triggerCrash();
+                    return;
                 }
             } catch (err) {
                 showToast('Ошибка: ' + err.message);
             }
-            luckyRunning = false;
             luckyRoundId = null;
             luckyPlayBtn.textContent = 'Запустить реактор';
             luckyPlayBtn.className = 'btn btn-cyan';
@@ -1637,8 +1905,15 @@
 
         luckyPlayBtn.addEventListener('click', () => {
             if (luckyRunning) {
-                clearInterval(luckyInterval);
+                // Забрать
+                luckyRunning = false;
+                if (luckyAnimId) cancelAnimationFrame(luckyAnimId);
                 finishLucky(luckyMultiplier);
+                return;
+            }
+
+            if (luckyCrashed || luckyRoundId) {
+                resetLuckyCanvas();
                 return;
             }
 
@@ -1658,33 +1933,15 @@
                 renderBalance();
 
                 luckyRunning = true;
+                luckyCrashed = false;
+                luckyStartTime = 0;
                 luckyMultiplier = 1.0;
                 luckyPlayBtn.disabled = false;
                 luckyPlayBtn.textContent = 'Забрать 💰';
                 luckyPlayBtn.className = 'btn btn-primary';
-                crashMultiplierEl.textContent = '1.00x';
-                jetIcon.style.left = '20%';
-                jetIcon.style.top = '60%';
+                crashStatusEl.classList.remove('show');
 
-                const duration = 3000 + (luckyCrashMultiplier * 500); // чем выше краш, тем дольше анимация
-                const step = duration / (luckyCrashMultiplier * 100);
-                let progress = 0;
-
-                luckyInterval = setInterval(() => {
-                    progress += 1;
-                    // Квадратичный рост: быстро в начале, медленнее к краю
-                    const t = progress / (luckyCrashMultiplier * 100);
-                    luckyMultiplier = 1.0 + (luckyCrashMultiplier - 1.0) * (t * t);
-
-                    crashMultiplierEl.textContent = luckyMultiplier.toFixed(2) + 'x';
-                    jetIcon.style.left = (20 + t * 55) + '%';
-                    jetIcon.style.top = (60 - t * 45) + '%';
-
-                    if (luckyMultiplier >= luckyCrashMultiplier) {
-                        clearInterval(luckyInterval);
-                        finishLucky(0); // не успел выйти — проигрыш
-                    }
-                }, step);
+                luckyAnimId = requestAnimationFrame(animateLucky);
             }).catch(err => {
                 luckyPlayBtn.disabled = false;
                 luckyPlayBtn.textContent = 'Запустить реактор';
@@ -1692,6 +1949,9 @@
                 showToast('Ошибка: ' + err.message);
             });
         });
+
+        // Первичная отрисовка канваса
+        resetLuckyCanvas();
 
         // Slots — серверная версия
         const slotIcons = ['🍒', '🍋', '🔔', '💎', '7️⃣', '🍀', '👑'];
