@@ -165,7 +165,12 @@ def validate_init_data(init_data: str, bot_token: str) -> Optional[dict]:
 
 
 async def require_user(request: Request, db: Session = Depends(get_db)) -> User:
-    """Зависимость FastAPI: проверяет initData и возвращает пользователя из БД."""
+    """Зависимость FastAPI: проверяет initData и возвращает пользователя из БД.
+
+    Если initData отсутствует/невалиден, пробуем fallback через query-параметры
+    user_id и first_name, которые бот добавляет в URL Mini App. Это обходное
+    решение для случаев, когда Telegram WebView не передаёт initData.
+    """
     init_data = request.headers.get("X-Telegram-Init-Data")
 
     # Режим разработки: если заголовок пустой, используем фиктивного пользователя
@@ -176,13 +181,28 @@ async def require_user(request: Request, db: Session = Depends(get_db)) -> User:
             username="demo_user",
             first_name="Демо Игрок",
         )
-        # Обновляем время последнего claim, чтобы не было конфликта часовых поясов
         return user
+
+    user_data = None
+    if init_data:
+        user_data = validate_init_data(init_data, BOT_TOKEN)
+
+    # Fallback: если initData невалиден, берём user_id из query-параметров URL
+    if not user_data:
+        user_id = request.query_params.get("user_id")
+        first_name = request.query_params.get("first_name") or "Игрок"
+        if user_id and user_id.isdigit():
+            print(f"[require_user] Fallback from query params: user_id={user_id}, first_name={first_name}")
+            return get_or_create_user(
+                db,
+                telegram_id=int(user_id),
+                username=None,
+                first_name=first_name,
+            )
 
     if not init_data:
         raise HTTPException(status_code=401, detail="Missing Telegram initData")
 
-    user_data = validate_init_data(init_data, BOT_TOKEN)
     if not user_data:
         raise HTTPException(status_code=403, detail="Invalid Telegram initData")
 

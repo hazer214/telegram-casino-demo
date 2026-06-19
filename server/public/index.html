@@ -1320,31 +1320,38 @@
                 const initDataUnsafe = tg.initDataUnsafe || {};
                 const initDataLen = initData.length;
                 const user = initDataUnsafe.user;
-                const userPreview = user ? user.first_name : 'none';
+
+                // Fallback: берём user_id и имя из URL query-параметров
+                const urlParams = new URLSearchParams(window.location.search);
+                const fallbackUserId = urlParams.get('user_id');
+                const fallbackFirstName = urlParams.get('first_name');
 
                 console.log('=== Telegram WebApp Debug ===');
                 console.log('initData length:', initDataLen);
-                console.log('initData preview:', initData.slice(0, 100));
-                console.log('initDataUnsafe keys:', Object.keys(initDataUnsafe));
-                console.log('user:', user);
-                console.log('version:', tg.version);
-                console.log('platform:', tg.platform);
+                console.log('URL params:', { user_id: fallbackUserId, first_name: fallbackFirstName });
 
-                if (!user || !user.id) {
+                if (user && user.id) {
+                    state.user = {
+                        id: user.id,
+                        first_name: user.first_name || 'Игрок',
+                        username: user.username || '',
+                        photo_url: user.photo_url || ''
+                    };
+                } else if (fallbackUserId && fallbackFirstName) {
+                    state.user = {
+                        id: parseInt(fallbackUserId, 10),
+                        first_name: fallbackFirstName,
+                        username: '',
+                        photo_url: ''
+                    };
+                } else {
                     console.warn('Telegram user data missing!');
-                    updateDebugPanel(`⚠️ initData=${initDataLen} chars, user=${userPreview}. Откройте через кнопку бота.`);
+                    updateDebugPanel(`⚠️ initData=${initDataLen} chars, no user_id in URL`);
                     dashboardName.textContent = 'Игрок';
                     dashboardAvatar.innerHTML = 'ИГ';
                     state.user = { id: 0, first_name: 'Игрок', username: '', photo_url: '' };
                     return;
                 }
-
-                state.user = {
-                    id: user.id,
-                    first_name: user.first_name || 'Игрок',
-                    username: user.username || '',
-                    photo_url: user.photo_url || ''
-                };
 
                 updateDebugPanel(`initData: ${initDataLen} chars, user: ${state.user.first_name}, id: ${state.user.id}`);
 
@@ -1383,8 +1390,19 @@
         // API
         async function api(endpoint, options = {}) {
             const initData = tg.initData || '';
-            updateDebugPanel(`sending initData: ${initData.length} chars`);
-            const response = await fetch(`${state.baseApiUrl}${endpoint}`, {
+
+            // Fallback: берём user_id из URL query-параметров, если initData пустой
+            const urlParams = new URLSearchParams(window.location.search);
+            const fallbackUserId = urlParams.get('user_id');
+            const fallbackFirstName = urlParams.get('first_name') || 'Игрок';
+
+            // Добавляем query-параметры ко всем запросам, чтобы сервер мог идентифицировать пользователя
+            let separator = endpoint.includes('?') ? '&' : '?';
+            let urlWithParams = `${state.baseApiUrl}${endpoint}${separator}user_id=${encodeURIComponent(fallbackUserId || '')}&first_name=${encodeURIComponent(fallbackFirstName)}`;
+
+            updateDebugPanel(`initData=${initData.length} chars, user_id=${fallbackUserId || 'none'}`);
+
+            const response = await fetch(urlWithParams, {
                 ...options,
                 headers: {
                     'Content-Type': 'application/json',
