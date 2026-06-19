@@ -61,11 +61,17 @@ def validate_init_data(init_data: str, bot_token: str) -> Optional[dict]:
     Алгоритм валидации официально описан в документации Telegram WebApp:
     https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
     """
+    # Отладочное логирование: записываем первые 200 символов initData,
+    # чтобы понимать, что приходит от Telegram (не логируем полностью из соображений безопасности)
+    print(f"[initData] received length={len(init_data)}, preview={init_data[:200]}")
+    print(f"[initData] bot_token length={len(bot_token)}, preview={bot_token[:10]}...")
+
     data = parse_init_data(init_data)
 
     # Хеш, который прислал Telegram
     received_hash = data.pop("hash", None)
     if not received_hash:
+        print("[initData] FAIL: missing hash")
         return None
 
     # Сортируем оставшиеся поля по ключу и собираем data_check_string
@@ -88,26 +94,33 @@ def validate_init_data(init_data: str, bot_token: str) -> Optional[dict]:
 
     # Сравниваем хеши
     if not hmac.compare_digest(calculated_hash, received_hash):
+        print(f"[initData] FAIL: hash mismatch. calculated={calculated_hash[:16]}... received={received_hash[:16]}...")
         return None
 
-    # Проверяем актуальность (чтобы initData не была слишком стой)
+    # Проверяем актуальность (чтобы initData не была слишком старой)
     auth_date = data.get("auth_date")
     if auth_date:
         try:
             age = time.time() - int(auth_date)
             # initData старше 1 суток — не принимаем
             if age > 86400:
+                print(f"[initData] FAIL: auth_date too old, age={age:.0f}s")
                 return None
         except ValueError:
+            print("[initData] FAIL: invalid auth_date")
             return None
 
     # Парсим JSON с данными пользователя
     user_json = data.get("user")
     if not user_json:
+        print("[initData] FAIL: missing user field")
         return None
     try:
-        return json.loads(user_json)
-    except json.JSONDecodeError:
+        user_data = json.loads(user_json)
+        print(f"[initData] OK: user_id={user_data.get('id')}, first_name={user_data.get('first_name')}")
+        return user_data
+    except json.JSONDecodeError as e:
+        print(f"[initData] FAIL: JSON decode error: {e}")
         return None
 
 
