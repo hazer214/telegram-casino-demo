@@ -202,9 +202,20 @@ class LuckyRequest(BaseModel):
     target_multiplier: float = Field(..., ge=1.01, description="Целевой коэффициент для выхода")
 
 
-class ClaimRequest(BaseModel):
-    """Запрос на получение бесплатных монет."""
-    pass
+class LuckyJetStartRequest(BaseModel):
+    """Запрос на старт раунда Lucky Jet."""
+    bet_amount: int = Field(..., ge=1, description="Сумма ставки")
+
+
+class LuckyJetCashoutRequest(BaseModel):
+    """Запрос на вывод из раунда Lucky Jet."""
+    round_id: str = Field(..., description="Идентификатор раунда")
+    target_multiplier: float = Field(..., ge=1.0, description="Множитель, на котором игрок вышел")
+
+
+class SlotsSpinRequest(BaseModel):
+    """Запрос на вращение слотов."""
+    bet_amount: int = Field(..., ge=1, description="Сумма ставки")
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +413,7 @@ async def spin_lucky(
 
 @app.post("/api/lucky/start")
 async def lucky_start(
-    spin: SpinRequest,
+    req: SlotsRequest,
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -411,14 +422,14 @@ async def lucky_start(
     Списывает ставку с баланса, генерирует случайный коэффициент краша
     и возвращает его фронтенду для честной анимации.
     """
-    if spin.bet_amount > user.balance:
+    if req.bet_amount > user.balance:
         raise HTTPException(status_code=400, detail="Недостаточно средств")
 
-    if spin.bet_amount <= 0:
+    if req.bet_amount <= 0:
         raise HTTPException(status_code=400, detail="Ставка должна быть больше 0")
 
     # Списываем ставку
-    user.balance -= spin.bet_amount
+    user.balance -= req.bet_amount
     db.commit()
 
     # Генерируем коэффициент краша
@@ -429,7 +440,7 @@ async def lucky_start(
     cleanup_old_lucky_rounds()
     lucky_rounds[round_id] = {
         "user_id": user.id,
-        "bet_amount": spin.bet_amount,
+        "bet_amount": req.bet_amount,
         "crash_multiplier": crash_multiplier,
         "created_at": datetime.now(timezone.utc),
         "cashed_out": False,
@@ -439,7 +450,7 @@ async def lucky_start(
         "success": True,
         "round_id": round_id,
         "crash_multiplier": round(crash_multiplier, 2),
-        "bet_amount": spin.bet_amount,
+        "bet_amount": req.bet_amount,
         "balance": user.balance,
     }
 
