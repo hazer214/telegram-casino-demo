@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 import time
 import urllib.parse
 from contextlib import asynccontextmanager
@@ -26,9 +27,34 @@ from server.database import (
     User,
     GameHistory,
     CLAIM_COOLDOWN_SECONDS,
+    lucky_jet,
 )
 
+# ---------------------------------------------------------------------------
+# Хранилище активных раундов Lucky Jet (in-memory для демо)
+# ---------------------------------------------------------------------------
+
+import uuid
+from datetime import datetime, timezone, timedelta
+
+lucky_rounds: dict[str, dict] = {}
+
+
+def cleanup_old_lucky_rounds():
+    """Удаляет раунды старше 5 минут."""
+    now = datetime.now(timezone.utc)
+    expired = [
+        rid for rid, r in lucky_rounds.items()
+        if now - r["created_at"] > timedelta(minutes=5)
+    ]
+    for rid in expired:
+        lucky_rounds.pop(rid, None)
+
+
+# ---------------------------------------------------------------------------
 # Загружаем переменные окружения из .env в корне проекта
+# ---------------------------------------------------------------------------
+
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -170,6 +196,12 @@ class SpinRequest(BaseModel):
     bet_type: str = Field(..., description="Тип ставки: red, black, even, odd, number:N")
 
 
+class LuckyRequest(BaseModel):
+    """Запрос на игру в Lucky Jet."""
+    bet_amount: int = Field(..., ge=1, description="Сумма ставки")
+    target_multiplier: float = Field(..., ge=1.01, description="Целевой коэффициент для выхода")
+
+
 class ClaimRequest(BaseModel):
     """Запрос на получение бесплатных монет."""
     pass
@@ -303,6 +335,253 @@ async def spin_roulette(
         "balance": user.balance,
         "bet_type": spin.bet_type,
         "bet_amount": spin.bet_amount,
+    }
+
+
+@app.post("/api/lucky/spin")
+async def spin_lucky(
+    req: LuckyRequest,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Обрабатывает раунд Lucky Jet.
+
+    Игрок делает ставку и указывает целевой коэффициент.
+    Сервер генерирует случайный коэффициент краша.
+    Если target_multiplier <= crash_multiplier — игрок выигрывает
+    bet_amount * target_multiplier.
+    Иначе ставка сгорает.
+    """
+    if req.bet_amount > user.balance:
+        raise HTTPException(status_code=400, detail="Недостаточно средств")
+
+    if req.bet_amount <= 0:
+        raise HTTPException(status_code=400, detail="Ставка должна быть больше 0")
+
+    if req.target_multiplier < 1.01:
+        raise HTTPException(status_code=400, detail="Коэффициент должен быть >= 1.01")
+
+    # Списываем ставку
+    user.balance -= req.bet_amount
+
+    # Генерируем коэффициент краша на сервере
+    crash_multiplier = lucky_jet.generate_multiplier()
+
+    # Определяем результат
+    is_win = req.target_multiplier <= crash_multiplier
+    win_amount = 0
+    final_balance_change = 0
+
+    if is_win:
+        win_amount = int(req.bet_amount * req.target_multiplier)
+        final_balance_change = win_amount
+        user.balance += win_amount
+
+    # Сохраняем историю
+    history = GameHistory(
+        user_id=user.id,
+        game_type="lucky_jet",
+        bet_amount=req.bet_amount,
+        bet_type=f"lucky:x{req.target_multiplier:.2f}",
+        crash_multiplier=f"x{crash_multiplier:.2f}",
+        win_amount=win_amount,
+        is_win=is_win,
+    )
+    db.add(history)
+    db.commit()
+
+    return {
+        "success": True,
+        "crash_multiplier": round(crash_multiplier, 2),
+        "target_multiplier": round(req.target_multiplier, 2),
+        "is_win": is_win,
+        "win_amount": win_amount,
+        "balance": user.balance,
+    }
+
+
+@app.post("/api/lucky/start")
+async def lucky_start(
+    spin: SpinRequest,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Стартует раунд Lucky Jet.
+
+    Списывает ставку с баланса, генерирует случайный коэффициент краша
+    и возвращает его фронтенду для честной анимации.
+    """
+    if spin.bet_amount > user.balance:
+        raise HTTPException(status_code=400, detail="Недостаточно средств")
+
+    if spin.bet_amount <= 0:
+        raise HTTPException(status_code=400, detail="Ставка должна быть больше 0")
+
+    # Списываем ставку
+    user.balance -= spin.bet_amount
+    db.commit()
+
+    # Генерируем коэффициент краша
+    crash_multiplier = lucky_jet.generate_multiplier()
+
+    # Создаём раунд
+    round_id = str(uuid.uuid4())
+    cleanup_old_lucky_rounds()
+    lucky_rounds[round_id] = {
+        "user_id": user.id,
+        "bet_amount": spin.bet_amount,
+        "crash_multiplier": crash_multiplier,
+        "created_at": datetime.now(timezone.utc),
+        "cashed_out": False,
+    }
+
+    return {
+        "success": True,
+        "round_id": round_id,
+        "crash_multiplier": round(crash_multiplier, 2),
+        "bet_amount": spin.bet_amount,
+        "balance": user.balance,
+    }
+
+
+@app.post("/api/lucky/cashout")
+async def lucky_cashout(
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Завершает раунд Lucky Jet.
+
+    Принимает { round_id, target_multiplier } от фронтенда.
+    Если target_multiplier <= crash_multiplier — игрок выигрывает.
+    Иначе (включая target_multiplier=0) — проигрывает.
+    """
+    data = await request.json()
+    round_id = data.get("round_id")
+    target_multiplier = float(data.get("target_multiplier", 0))
+
+    if not round_id or round_id not in lucky_rounds:
+        raise HTTPException(status_code=400, detail="Раунд не найден или уже завершён")
+
+    round_data = lucky_rounds[round_id]
+
+    # Защита: раунд принадлежит текущему пользователю
+    if round_data["user_id"] != user.id:
+        raise HTTPException(status_code=403, detail="Раунд не принадлежит вам")
+
+    if round_data["cashed_out"]:
+        raise HTTPException(status_code=400, detail="Раунд уже завершён")
+
+    crash_multiplier = round_data["crash_multiplier"]
+    bet_amount = round_data["bet_amount"]
+
+    # Помечаем раунд завершённым
+    round_data["cashed_out"] = True
+
+    is_win = target_multiplier >= 1.01 and target_multiplier <= crash_multiplier
+    win_amount = 0
+
+    if is_win:
+        win_amount = int(bet_amount * target_multiplier)
+        user.balance += win_amount
+
+    # Сохраняем историю
+    history = GameHistory(
+        user_id=user.id,
+        game_type="lucky_jet",
+        bet_amount=bet_amount,
+        bet_type=f"lucky:x{target_multiplier:.2f}",
+        crash_multiplier=f"x{crash_multiplier:.2f}",
+        win_amount=win_amount,
+        is_win=is_win,
+    )
+    db.add(history)
+    db.commit()
+
+    # Удаляем раунд из памяти
+    lucky_rounds.pop(round_id, None)
+
+    return {
+        "success": True,
+        "is_win": is_win,
+        "win_amount": win_amount,
+        "crash_multiplier": round(crash_multiplier, 2),
+        "target_multiplier": round(target_multiplier, 2),
+        "balance": user.balance,
+    }
+
+
+class SlotsRequest(BaseModel):
+    """Запрос на вращение слотов."""
+    bet_amount: int = Field(..., ge=1, description="Сумма ставки")
+
+
+@app.post("/api/slots/spin")
+async def spin_slots(
+    req: SlotsRequest,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Обрабатывает вращение слотов."""
+    if req.bet_amount > user.balance:
+        raise HTTPException(status_code=400, detail="Недостаточно средств")
+
+    if req.bet_amount <= 0:
+        raise HTTPException(status_code=400, detail="Ставка должна быть больше 0")
+
+    # Списываем ставку
+    user.balance -= req.bet_amount
+
+    # Генерируем результат на сервере
+    slot_icons = ['🍒', '🍋', '🔔', '💎', '7️⃣', '🍀', '👑']
+    weights = [30, 25, 20, 12, 3, 7, 3]  # Веса выпадения каждого символа
+    total = sum(weights)
+
+    def roll():
+        r = secrets.randbelow(total)
+        cumulative = 0
+        for icon, w in zip(slot_icons, weights):
+            cumulative += w
+            if r < cumulative:
+                return icon
+        return slot_icons[-1]
+
+    results = [roll(), roll(), roll()]
+
+    # Рассчитываем выигрыш
+    all_same = results[0] == results[1] == results[2]
+    two_same = results[0] == results[1] or results[1] == results[2] or results[0] == results[2]
+
+    win_multiplier = 0
+    if all_same:
+        win_multiplier = 10
+    elif two_same:
+        win_multiplier = 2
+
+    win_amount = req.bet_amount * win_multiplier
+    is_win = win_amount > 0
+
+    if is_win:
+        user.balance += win_amount
+
+    # Сохраняем историю
+    history = GameHistory(
+        user_id=user.id,
+        game_type="slots",
+        bet_amount=req.bet_amount,
+        bet_type=f"slots:{','.join(results)}",
+        win_amount=win_amount,
+        is_win=is_win,
+    )
+    db.add(history)
+    db.commit()
+
+    return {
+        "success": True,
+        "results": results,
+        "is_win": is_win,
+        "win_amount": win_amount,
+        "balance": user.balance,
     }
 
 

@@ -57,8 +57,9 @@ class GameHistory(Base):  # type: ignore[valid-type, misc]
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     game_type = Column(String, default="roulette", nullable=False)
     bet_amount = Column(Integer, nullable=False)
-    bet_type = Column(String, nullable=False)  # например: "red", "black", "even", "odd", "number:7"
-    result_number = Column(Integer, nullable=False)
+    bet_type = Column(String, nullable=False)  # например: "red", "black", "even", "odd", "number:7", "lucky:x1.50"
+    result_number = Column(Integer, nullable=True)  # для рулетки
+    crash_multiplier = Column(String, nullable=True)  # для Lucky Jet (например "x1.50")
     win_amount = Column(Integer, nullable=False)  # 0 если проигрыш
     is_win = Column(Boolean, nullable=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
@@ -67,6 +68,38 @@ class GameHistory(Base):  # type: ignore[valid-type, misc]
 def init_db() -> None:
     """Создаёт таблицы, если их ещё нет."""
     Base.metadata.create_all(bind=engine)
+
+
+# ---------------------------------------------------------------------------
+# Генератор случайного коэффициента для Lucky Jet
+# ---------------------------------------------------------------------------
+
+class LuckyJetDistribution:
+    """Генератор случайного коэффициента краша для Lucky Jet.
+
+    Используем геометрическое распределение: в ~45% раундов краш происходит
+    до x1.5, в ~30% между x1.5 и x3.0, в ~20% между x3.0 и x10.0,
+    и в ~5% выше x10.0. RTP игрока составляет ~97% (небольшое преимущество казино).
+    """
+
+    @staticmethod
+    def generate_multiplier() -> float:
+        r = secrets.randbelow(1000) / 1000.0  # 0.000 - 0.999
+        if r < 0.45:
+            # 45%: x1.00 - x1.50
+            return 1.0 + secrets.randbelow(500) / 1000.0
+        elif r < 0.75:
+            # 30%: x1.50 - x3.00
+            return 1.5 + secrets.randbelow(1500) / 1000.0
+        elif r < 0.95:
+            # 20%: x3.00 - x10.00
+            return 3.0 + secrets.randbelow(7000) / 1000.0
+        else:
+            # 5%: x10.00 - x50.00
+            return 10.0 + secrets.randbelow(40000) / 1000.0
+
+
+lucky_jet = LuckyJetDistribution()
 
 
 def get_db():
