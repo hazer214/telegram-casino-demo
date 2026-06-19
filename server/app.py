@@ -597,15 +597,20 @@ async def spin_slots(
 
 
 @app.get("/api/user/history")
-async def get_history(user: User = Depends(require_user), db: Session = Depends(get_db)):
-    """Возвращает историю ставок пользователя (последние 20 записей)."""
-    rows = (
-        db.query(GameHistory)
-        .filter(GameHistory.user_id == user.id)
-        .order_by(GameHistory.created_at.desc())
-        .limit(20)
-        .all()
-    )
+async def get_history(
+    game_type: Optional[str] = None,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Возвращает историю ставок пользователя (последние 20 записей).
+
+    Если указан game_type — фильтрует по типу игры:
+    roulette, lucky_jet, slots.
+    """
+    query = db.query(GameHistory).filter(GameHistory.user_id == user.id)
+    if game_type:
+        query = query.filter(GameHistory.game_type == game_type)
+    rows = query.order_by(GameHistory.created_at.desc()).limit(20).all()
     return [
         {
             "id": row.id,

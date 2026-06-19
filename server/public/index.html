@@ -1137,6 +1137,8 @@
                 <p style="color: var(--text-muted); font-size: 13px; margin-top: 14px;">
                     Демо-режим: коэффициент случайный. Нажмите «Забрать» до взрыва.
                 </p>
+
+                <div class="history-list" id="luckyHistory"></div>
             </div>
         </section>
 
@@ -1172,6 +1174,8 @@
 
                 <button class="btn btn-primary" id="slotsSpinBtn" style="margin: 14px 0;">Крутить 🎰</button>
                 <button class="btn btn-outline" onclick="goDashboard()">В кабинет</button>
+
+                <div class="history-list" id="slotsHistory"></div>
             </div>
         </section>
 
@@ -1268,6 +1272,8 @@
         const winOverlay = document.getElementById('winOverlay');
         const winAmountEl = document.getElementById('winAmount');
         const rouletteHistoryEl = document.getElementById('rouletteHistory');
+        const luckyHistoryEl = document.getElementById('luckyHistory');
+        const slotsHistoryEl = document.getElementById('slotsHistory');
         const numberInput = document.getElementById('numberInput');
         const sidebar = document.getElementById('sidebar');
         const menuOverlay = document.getElementById('menuOverlay');
@@ -1369,7 +1375,9 @@
             if (nav) nav.classList.add('active');
             closeMenu();
             window.scrollTo(0, 0);
-            if (screenId === 'roulette') loadHistory();
+            if (screenId === 'roulette') loadHistory('roulette', rouletteHistoryEl);
+            if (screenId === 'luckyjet') loadHistory('lucky_jet', luckyHistoryEl);
+            if (screenId === 'slots') loadHistory('slots', slotsHistoryEl);
         }
 
         window.goDashboard = function() {
@@ -1478,8 +1486,8 @@
             const color = getColor(number);
             const colorName = color === 'green' ? 'Зелёное' : (color === 'red' ? 'Красное' : 'Чёрное');
             resultDisplayEl.innerHTML = `
-                &lt;div class="result-badge ${color}"&gt;${number}&lt;/div&gt;
-                &lt;div class="result-text"&gt;${colorName}&lt;/div&gt;
+                <div class="result-badge ${color}">${number}</div>
+                <div class="result-text">${colorName}</div>
             `;
             if (winAmount > 0) {
                 winAmountEl.textContent = `+${formatMoney(winAmount)} TSC`;
@@ -1512,7 +1520,7 @@
 
             state.spinning = true;
             updateSpinButton();
-            resultDisplayEl.innerHTML = '&lt;div style="color: var(--accent-cyan);"&gt;Крутим...&lt;/div&gt;';
+            resultDisplayEl.innerHTML = '<div style="color: var(--accent-cyan);">Крутим...</div>';
 
             try {
                 const result = await api('/api/roulette/spin', {
@@ -1524,7 +1532,7 @@
                 state.balance = result.balance;
                 renderBalance();
                 showResult(result.result_number, result.win_amount);
-                loadHistory();
+                loadHistory('roulette', rouletteHistoryEl);
             } catch (err) {
                 showToast(err.message);
             } finally {
@@ -1554,23 +1562,28 @@
         bonusClaimBtn.addEventListener('click', claimCoins);
 
         // История
-        async function loadHistory() {
+        async function loadHistory(gameType, container) {
             try {
-                state.history = await api('/api/user/history');
-                renderHistory(rouletteHistoryEl, 8);
+                const params = gameType ? `?game_type=${gameType}` : '';
+                const history = await api(`/api/user/history${params}`);
+                renderHistory(container, history, 8);
             } catch (err) { console.error(err); }
         }
 
-        function renderHistory(container, limit) {
+        function renderHistory(container, history, limit) {
             container.innerHTML = '<h3 style="color: var(--text-muted); font-size: 14px; margin-bottom: 10px;">История</h3>';
-            if (!state.history.length) {
+            if (!history || !history.length) {
                 container.innerHTML += '<div class="history-item">Пока нет ставок</div>';
                 return;
             }
-            state.history.slice(0, limit).forEach(item => {
+            history.slice(0, limit).forEach(item => {
                 const label = item.bet_type.startsWith('number:')
                     ? `Число ${item.bet_type.split(':')[1]}`
-                    : item.bet_type;
+                    : (item.bet_type.startsWith('lucky:')
+                        ? `Lucky ${item.bet_type.split(':')[1]}`
+                        : (item.bet_type.startsWith('slots:')
+                            ? `Slots`
+                            : item.bet_type));
                 const div = document.createElement('div');
                 div.className = 'history-item';
                 div.innerHTML = `
@@ -1619,6 +1632,7 @@
             luckyRoundId = null;
             luckyPlayBtn.textContent = 'Запустить реактор';
             luckyPlayBtn.className = 'btn btn-cyan';
+            loadHistory('lucky_jet', luckyHistoryEl);
         }
 
         luckyPlayBtn.addEventListener('click', () => {
@@ -1719,6 +1733,7 @@
                             if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
                         }
                         slotsSpinBtn.disabled = false;
+                        loadHistory('slots', slotsHistoryEl);
                     }
                 }, 100);
             } catch (err) {
