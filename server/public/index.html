@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Casino Demo</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Telegram Casino</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
@@ -1272,7 +1275,9 @@
             selectedBetType: null,
             spinning: false,
             baseApiUrl: window.location.origin,
-            history: []
+            history: [],
+            balanceLoaded: false,
+            user: {}
         };
 
         // DOM
@@ -1305,9 +1310,15 @@
 
         // Telegram user
         function initTelegramUser() {
+            console.log('Telegram initData length:', tg.initData?.length || 0);
+            console.log('Telegram initDataUnsafe.user:', tg.initDataUnsafe?.user);
+
             const raw = tg.initDataUnsafe?.user || {};
+            if (!raw.id) {
+                console.warn('Telegram user data missing! Falling back to demo mode.');
+            }
             state.user = {
-                id: raw.id,
+                id: raw.id || 0,
                 first_name: raw.first_name || 'Игрок',
                 username: raw.username || '',
                 photo_url: raw.photo_url || ''
@@ -1422,10 +1433,18 @@
                 const profile = await api('/api/user/profile');
                 state.balance = profile.balance;
                 renderBalance();
-                loadHistory();
+                // Загружаем историю только если мы на экране с историей
+                if (document.getElementById('screen-roulette').classList.contains('active')) {
+                    loadHistory('roulette', rouletteHistoryEl);
+                }
             } catch (err) {
-                showToast('Не удалось загрузить профиль');
-                console.error(err);
+                console.error('loadProfile error:', err);
+                // Показываем toast только если профиль ещё не загружен
+                if (!state.balanceLoaded) {
+                    showToast('Не удалось загрузить профиль');
+                }
+            } finally {
+                state.balanceLoaded = true;
             }
         }
 
