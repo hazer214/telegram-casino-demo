@@ -1562,9 +1562,9 @@
         }
 
         function renderHistory(container, limit) {
-            container.innerHTML = '&lt;h3 style="color: var(--text-muted); font-size: 14px; margin-bottom: 10px;"&gt;История&lt;/h3&gt;';
+            container.innerHTML = '<h3 style="color: var(--text-muted); font-size: 14px; margin-bottom: 10px;">История</h3>';
             if (!state.history.length) {
-                container.innerHTML += '&lt;div class="history-item"&gt;Пока нет ставок&lt;/div&gt;';
+                container.innerHTML += '<div class="history-item">Пока нет ставок</div>';
                 return;
             }
             state.history.slice(0, limit).forEach(item => {
@@ -1574,10 +1574,10 @@
                 const div = document.createElement('div');
                 div.className = 'history-item';
                 div.innerHTML = `
-                    &lt;span&gt;${label}, ${formatMoney(item.bet_amount)} TSC&lt;/span&gt;
-                    &lt;span class="${item.is_win ? 'history-win' : 'history-loss'}"&gt;
+                    <span>${label}, ${formatMoney(item.bet_amount)} TSC</span>
+                    <span class="${item.is_win ? 'history-win' : 'history-loss'}">
                         ${item.is_win ? '+' + formatMoney(item.win_amount) : '−' + formatMoney(item.bet_amount)}
-                    &lt;/span&gt;
+                    </span>
                 `;
                 container.appendChild(div);
             });
