@@ -1583,57 +1583,103 @@
             });
         }
 
-        // Lucky Jet demo
+        // Lucky Jet — серверная версия
         let luckyRunning = false;
         let luckyMultiplier = 1.0;
         let luckyInterval;
+        let luckyRoundId = null;
+        let luckyCrashMultiplier = 1.0;
+        let luckyBet = 0;
         const luckyPlayBtn = document.getElementById('luckyPlayBtn');
         const crashMultiplierEl = document.getElementById('crashMultiplier');
         const jetIcon = document.getElementById('jetIcon');
 
+        async function finishLucky(targetMultiplier) {
+            if (!luckyRoundId) return;
+            try {
+                const result = await api('/api/lucky/cashout', {
+                    method: 'POST',
+                    body: JSON.stringify({ round_id: luckyRoundId, target_multiplier: targetMultiplier })
+                });
+                state.balance = result.balance;
+                renderBalance();
+                if (result.is_win) {
+                    crashMultiplierEl.textContent = 'ЗАБРАНО ' + targetMultiplier.toFixed(2) + 'x';
+                    showToast(`Забрано ${formatMoney(result.win_amount)} TSC при x${targetMultiplier.toFixed(2)}`);
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                } else {
+                    crashMultiplierEl.textContent = 'ВЗРЫВ 💥 ' + result.crash_multiplier.toFixed(2) + 'x';
+                    showToast('Реактор взорвался! Ставка сгорела');
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+                }
+            } catch (err) {
+                showToast('Ошибка: ' + err.message);
+            }
+            luckyRunning = false;
+            luckyRoundId = null;
+            luckyPlayBtn.textContent = 'Запустить реактор';
+            luckyPlayBtn.className = 'btn btn-cyan';
+        }
+
         luckyPlayBtn.addEventListener('click', () => {
             if (luckyRunning) {
-                const win = Math.floor(state.luckyChip * (luckyMultiplier - 1));
-                state.balance += state.luckyChip + win;
-                renderBalance();
                 clearInterval(luckyInterval);
-                luckyRunning = false;
-                luckyPlayBtn.textContent = 'Запустить реактор';
-                luckyPlayBtn.className = 'btn btn-cyan';
-                showToast(`Забрано ${formatMoney(state.luckyChip + win)} TSC при x${luckyMultiplier.toFixed(2)}`);
+                finishLucky(luckyMultiplier);
                 return;
             }
 
             if (state.balance < state.luckyChip) { showToast('Недостаточно монет'); return; }
 
-            state.balance -= state.luckyChip;
-            renderBalance();
-            luckyRunning = true;
-            luckyMultiplier = 1.0;
-            luckyPlayBtn.textContent = 'Забрать 💰';
-            luckyPlayBtn.className = 'btn btn-primary';
+            luckyPlayBtn.disabled = true;
+            luckyPlayBtn.textContent = 'Запуск...';
 
-            const crashAt = 1.0 + Math.random() * 4.5;
+            api('/api/lucky/start', {
+                method: 'POST',
+                body: JSON.stringify({ bet_amount: state.luckyChip })
+            }).then(data => {
+                luckyRoundId = data.round_id;
+                luckyCrashMultiplier = data.crash_multiplier;
+                luckyBet = data.bet_amount;
+                state.balance = data.balance;
+                renderBalance();
 
-            luckyInterval = setInterval(() => {
-                luckyMultiplier += 0.03 + (luckyMultiplier * 0.02);
-                crashMultiplierEl.textContent = luckyMultiplier.toFixed(2) + 'x';
-                jetIcon.style.left = (20 + luckyMultiplier * 8) + '%';
-                jetIcon.style.top = (60 - luckyMultiplier * 6) + '%';
+                luckyRunning = true;
+                luckyMultiplier = 1.0;
+                luckyPlayBtn.disabled = false;
+                luckyPlayBtn.textContent = 'Забрать 💰';
+                luckyPlayBtn.className = 'btn btn-primary';
+                crashMultiplierEl.textContent = '1.00x';
+                jetIcon.style.left = '20%';
+                jetIcon.style.top = '60%';
 
-                if (luckyMultiplier >= crashAt) {
-                    clearInterval(luckyInterval);
-                    luckyRunning = false;
-                    luckyPlayBtn.textContent = 'Запустить реактор';
-                    luckyPlayBtn.className = 'btn btn-cyan';
-                    crashMultiplierEl.textContent = 'ВЗРЫВ 💥';
-                    showToast('Реактор взорвался! Ставка сгорела');
-                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
-                }
-            }, 80);
+                const duration = 3000 + (luckyCrashMultiplier * 500); // чем выше краш, тем дольше анимация
+                const step = duration / (luckyCrashMultiplier * 100);
+                let progress = 0;
+
+                luckyInterval = setInterval(() => {
+                    progress += 1;
+                    // Квадратичный рост: быстро в начале, медленнее к краю
+                    const t = progress / (luckyCrashMultiplier * 100);
+                    luckyMultiplier = 1.0 + (luckyCrashMultiplier - 1.0) * (t * t);
+
+                    crashMultiplierEl.textContent = luckyMultiplier.toFixed(2) + 'x';
+                    jetIcon.style.left = (20 + t * 55) + '%';
+                    jetIcon.style.top = (60 - t * 45) + '%';
+
+                    if (luckyMultiplier >= luckyCrashMultiplier) {
+                        clearInterval(luckyInterval);
+                        finishLucky(0); // не успел выйти — проигрыш
+                    }
+                }, step);
+            }).catch(err => {
+                luckyPlayBtn.disabled = false;
+                luckyPlayBtn.textContent = 'Запустить реактор';
+                luckyPlayBtn.className = 'btn btn-cyan';
+                showToast('Ошибка: ' + err.message);
+            });
         });
 
-        // Slots demo
+        // Slots — серверная версия
         const slotIcons = ['🍒', '🍋', '🔔', '💎', '7️⃣', '🍀', '👑'];
         const slotsSpinBtn = document.getElementById('slotsSpinBtn');
         const slotsRow = document.getElementById('slotsRow');
@@ -1641,40 +1687,44 @@
         slotsSpinBtn.addEventListener('click', async () => {
             if (state.balance < state.slotsChip) { showToast('Недостаточно монет'); return; }
 
-            state.balance -= state.slotsChip;
-            renderBalance();
             slotsSpinBtn.disabled = true;
 
-            const cells = slotsRow.querySelectorAll('.slot-cell');
-            let spins = 0;
-            const interval = setInterval(() => {
-                cells.forEach(c => c.textContent = slotIcons[Math.floor(Math.random() * slotIcons.length)]);
-                spins++;
-                if (spins >= 20) {
-                    clearInterval(interval);
-                    const results = Array.from(cells).map(() => slotIcons[Math.floor(Math.random() * slotIcons.length)]);
-                    cells.forEach((c, i) => c.textContent = results[i]);
+            try {
+                const data = await api('/api/slots/spin', {
+                    method: 'POST',
+                    body: JSON.stringify({ bet_amount: state.slotsChip })
+                });
 
-                    const allSame = results.every(r => r === results[0]);
-                    const twoSame = results[0] === results[1] || results[1] === results[2] || results[0] === results[2];
-                    let win = 0;
-                    if (allSame) win = state.slotsChip * 10;
-                    else if (twoSame) win = state.slotsChip * 2;
+                state.balance = data.balance;
 
-                    if (win > 0) {
-                        state.balance += win;
-                        renderBalance();
-                        winAmountEl.textContent = `+${formatMoney(win)} TSC`;
-                        winOverlay.classList.add('show');
-                        createConfetti();
-                        setTimeout(() => winOverlay.classList.remove('show'), 2500);
-                        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-                    } else {
-                        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+                const cells = slotsRow.querySelectorAll('.slot-cell');
+                let spins = 0;
+                const interval = setInterval(() => {
+                    cells.forEach(c => c.textContent = slotIcons[Math.floor(Math.random() * slotIcons.length)]);
+                    spins++;
+                    if (spins >= 20) {
+                        clearInterval(interval);
+                        const results = data.results;
+                        cells.forEach((c, i) => c.textContent = results[i]);
+
+                        if (data.is_win) {
+                            renderBalance();
+                            winAmountEl.textContent = `+${formatMoney(data.win_amount)} TSC`;
+                            winOverlay.classList.add('show');
+                            createConfetti();
+                            setTimeout(() => winOverlay.classList.remove('show'), 2500);
+                            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                        } else {
+                            renderBalance();
+                            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+                        }
+                        slotsSpinBtn.disabled = false;
                     }
-                    slotsSpinBtn.disabled = false;
-                }
-            }, 100);
+                }, 100);
+            } catch (err) {
+                slotsSpinBtn.disabled = false;
+                showToast('Ошибка: ' + err.message);
+            }
         });
 
         // Старт
