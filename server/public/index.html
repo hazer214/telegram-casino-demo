@@ -1315,50 +1315,56 @@
 
         // Telegram user
         function initTelegramUser() {
-            const initData = tg.initData || '';
-            const initDataUnsafe = tg.initDataUnsafe || {};
-            const initDataLen = initData.length;
-            const user = initDataUnsafe.user;
-            const userPreview = user ? user.first_name : 'none';
+            try {
+                const initData = tg.initData || '';
+                const initDataUnsafe = tg.initDataUnsafe || {};
+                const initDataLen = initData.length;
+                const user = initDataUnsafe.user;
+                const userPreview = user ? user.first_name : 'none';
 
-            console.log('=== Telegram WebApp Debug ===');
-            console.log('initData length:', initDataLen);
-            console.log('initData preview:', initData.slice(0, 100));
-            console.log('initDataUnsafe:', initDataUnsafe);
-            console.log('user:', user);
-            console.log('version:', tg.version);
-            console.log('platform:', tg.platform);
+                console.log('=== Telegram WebApp Debug ===');
+                console.log('initData length:', initDataLen);
+                console.log('initData preview:', initData.slice(0, 100));
+                console.log('initDataUnsafe keys:', Object.keys(initDataUnsafe));
+                console.log('user:', user);
+                console.log('version:', tg.version);
+                console.log('platform:', tg.platform);
 
-            if (!user || !user.id) {
-                console.warn('Telegram user data missing!');
-                updateDebugPanel(`⚠️ initData=${initDataLen} chars, user=${userPreview}. Откройте через кнопку бота.`);
-                // Показываем fallback UI
+                if (!user || !user.id) {
+                    console.warn('Telegram user data missing!');
+                    updateDebugPanel(`⚠️ initData=${initDataLen} chars, user=${userPreview}. Откройте через кнопку бота.`);
+                    dashboardName.textContent = 'Игрок';
+                    dashboardAvatar.innerHTML = 'ИГ';
+                    state.user = { id: 0, first_name: 'Игрок', username: '', photo_url: '' };
+                    return;
+                }
+
+                state.user = {
+                    id: user.id,
+                    first_name: user.first_name || 'Игрок',
+                    username: user.username || '',
+                    photo_url: user.photo_url || ''
+                };
+
+                updateDebugPanel(`initData: ${initDataLen} chars, user: ${state.user.first_name}, id: ${state.user.id}`);
+
+                const initials = getInitials(state.user.first_name);
+                let avatarHTML;
+                if (state.user.photo_url && state.user.photo_url.startsWith('http')) {
+                    avatarHTML = `<img src="${state.user.photo_url}" alt="avatar" onerror="this.parentElement.textContent='${initials}'; this.remove();">`;
+                } else {
+                    avatarHTML = initials;
+                }
+
+                dashboardAvatar.innerHTML = avatarHTML;
+                dashboardName.textContent = state.user.first_name;
+            } catch (e) {
+                console.error('initTelegramUser error:', e);
+                updateDebugPanel('initTelegramUser error: ' + e.message);
                 dashboardName.textContent = 'Игрок';
                 dashboardAvatar.innerHTML = 'ИГ';
                 state.user = { id: 0, first_name: 'Игрок', username: '', photo_url: '' };
-                return;
             }
-
-            state.user = {
-                id: user.id,
-                first_name: user.first_name || 'Игрок',
-                username: user.username || '',
-                photo_url: user.photo_url || ''
-            };
-
-            updateDebugPanel(`initData: ${initDataLen} chars, user: ${state.user.first_name}, id: ${state.user.id}`);
-
-            const initials = getInitials(state.user.first_name);
-            let avatarHTML;
-            if (state.user.photo_url && state.user.photo_url.startsWith('http')) {
-                // Используем фото из Telegram с fallback на инициалы при ошибке загрузки
-                avatarHTML = `&lt;img src="${state.user.photo_url}" alt="avatar" onerror="this.parentElement.textContent='${initials}'; this.remove();"&gt;`;
-            } else {
-                avatarHTML = initials;
-            }
-
-            dashboardAvatar.innerHTML = avatarHTML;
-            dashboardName.textContent = state.user.first_name;
         }
 
         function getInitials(name) {
@@ -2054,9 +2060,11 @@
         });
 
         // Старт
-        initTelegramUser();
-        loadProfile();
-        setInterval(loadProfile, 30000);
+        setTimeout(() => {
+            initTelegramUser();
+            loadProfile();
+        }, 300);
+        setInterval(() => loadProfile(), 30000);
 
         document.getElementById('forceReloadBtn')?.addEventListener('click', () => {
             initTelegramUser();
