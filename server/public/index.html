@@ -2137,7 +2137,14 @@
 
         // Инициализация Canvas
         const luckyCanvas = document.getElementById('luckyCanvas');
-        const luckyCanvasApp = new LuckyJetCanvas(luckyCanvas);
+        let luckyCanvasApp = null;
+        function initLuckyCanvas() {
+            if (!luckyCanvasApp) {
+                luckyCanvasApp = new LuckyJetCanvas(luckyCanvas);
+            } else {
+                luckyCanvasApp.resize();
+            }
+        }
         const crashStatusEl = document.getElementById('crashStatus');
         const crashMultiplierEl = document.getElementById('crashMultiplier');
         const luckyCountdownEl = document.getElementById('luckyCountdown');
@@ -2159,6 +2166,22 @@
             return `${protocol}//${host}/ws/lucky?${params.toString()}`;
         }
 
+        // ... функции WebSocket и UI ...
+
+        // Открываем WebSocket и Canvas, когда заходим на экран Lucky Jet
+        const originalNavigateTo = navigateTo;
+        navigateTo = function(screenId) {
+            originalNavigateTo(screenId);
+            if (screenId === 'luckyjet') {
+                // Небольшая задержка, чтобы экран отрендерился
+                setTimeout(() => {
+                    initLuckyCanvas();
+                    connectLuckyWs();
+                    loadHistory('lucky_jet', luckyHistoryEl);
+                }, 50);
+            }
+        };
+
         function connectLuckyWs() {
             if (luckyWs && (luckyWs.readyState === WebSocket.CONNECTING || luckyWs.readyState === WebSocket.OPEN)) return;
 
@@ -2166,12 +2189,13 @@
                 luckyWs = new WebSocket(getLuckyWsUrl());
 
                 luckyWs.onopen = () => {
-                    luckyCanvasApp.setState('WAITING');
+                    if (luckyCanvasApp) luckyCanvasApp.setState('WAITING');
                     console.log('[Lucky WS] connected');
                 };
 
                 luckyWs.onmessage = (event) => {
                     const msg = JSON.parse(event.data);
+                    if (!luckyCanvasApp) initLuckyCanvas();
                     handleLuckyMessage(msg);
                 };
 
