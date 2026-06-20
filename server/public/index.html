@@ -2198,6 +2198,9 @@
                     break;
 
                 case 'round_start':
+                    luckyState.state = 'betting';
+                    luckyState.myBet = null;
+                    luckyState.players = [];
                     luckyCanvasApp.setState('WAITING');
                     luckyCanvasApp.setMultiplier(1.0);
                     luckyCanvasApp.setCrashMultiplier(null);
@@ -2207,6 +2210,7 @@
                     break;
 
                 case 'flight_start':
+                    luckyState.state = 'flying';
                     luckyCanvasApp.setState('FLYING');
                     luckyCanvasApp.setCrashMultiplier(msg.crash_multiplier);
                     updateLuckyUI('FLYING', 1.0, 0, msg.crash_multiplier);
@@ -2260,6 +2264,7 @@
                     break;
 
                 case 'crash':
+                    luckyState.state = 'crashed';
                     luckyCanvasApp.setState('CRASHED');
                     luckyCanvasApp.setCrashMultiplier(msg.crash_multiplier);
                     updateLuckyUI('CRASHED', msg.crash_multiplier, 0, msg.crash_multiplier);
@@ -2322,6 +2327,8 @@
         }
 
         function updateLuckyUI(stateName, multiplier, countdown, crashMultiplier) {
+            console.log('[Lucky UI] stateName=', stateName, 'luckyState.state=', luckyState.state, 'myBet=', luckyState.myBet, 'balance=', state.balance, 'chip=', state.luckyChip);
+
             // Кнопка
             if (luckyState.state === 'betting') {
                 const canBet = !luckyState.myBet;
@@ -2331,7 +2338,7 @@
             } else if (luckyState.state === 'flying') {
                 if (luckyState.myBet && !luckyState.myBet.cashedOut) {
                     luckyPlayBtn.disabled = false;
-                    luckyPlayBtn.textContent = `Забрать ${(luckyState.myBet.amount * luckyState.multiplier).toFixed(0)} TSC`;
+                    luckyPlayBtn.textContent = `Забрать ${(luckyState.myBet.amount * luckyCanvasApp.multiplier).toFixed(0)} TSC`;
                     luckyPlayBtn.className = 'btn btn-primary';
                 } else {
                     luckyPlayBtn.disabled = true;
@@ -2344,20 +2351,12 @@
                 luckyPlayBtn.className = 'btn btn-cyan';
             }
 
-            // Текст под Canvas — больше не нужен, т.к. рисуется на Canvas
             if (stateName === 'WAITING') {
-                crashStatusEl.textContent = 'До старта: ' + (countdown || luckyCanvasApp.countdown).toFixed(1) + 'с';
-                crashMultiplierEl.style.display = 'none';
-                crashStatusEl.classList.add('show');
+                // ничего не делаем, текст на Canvas
             } else if (stateName === 'FLYING') {
-                crashMultiplierEl.textContent = (multiplier || luckyCanvasApp.multiplier).toFixed(2) + 'x';
-                crashMultiplierEl.style.display = 'block';
-                crashStatusEl.classList.remove('show');
+                // ничего не делаем, текст на Canvas
             } else if (stateName === 'CRASHED') {
-                crashMultiplierEl.textContent = 'УЛЕТЕЛА ' + (crashMultiplier || luckyCanvasApp.crashMultiplier).toFixed(2) + 'x';
-                crashMultiplierEl.style.display = 'block';
-                crashStatusEl.textContent = 'Улетела!';
-                crashStatusEl.classList.add('show');
+                // ничего не делаем, текст на Canvas
             }
 
             renderLuckyPlayers();
@@ -2415,11 +2414,8 @@
 
         // Счётчик обратного отсчёта
         setInterval(() => {
-            if (luckyCanvasApp.state === 'WAITING' && luckyCanvasApp.countdown > 0) {
+            if (luckyCanvasApp && luckyCanvasApp.state === 'WAITING' && luckyCanvasApp.countdown > 0) {
                 luckyCanvasApp.setCountdown(Math.max(0, luckyCanvasApp.countdown - 0.1));
-                if (luckyState.state === 'betting') {
-                    crashStatusEl.textContent = 'До старта: ' + luckyCanvasApp.countdown.toFixed(1) + 'с';
-                }
             }
         }, 100);
 
