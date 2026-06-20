@@ -1795,9 +1795,9 @@
             const host = state.baseApiUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
             const params = new URLSearchParams();
             if (state.telegramInitData) params.set('init_data', state.telegramInitData);
-            else if (state.telegramId) {
-                params.set('user_id', String(state.telegramId));
-                params.set('first_name', state.firstName || 'Игрок');
+            else if (state.user && state.user.id) {
+                params.set('user_id', String(state.user.id));
+                params.set('first_name', state.user.first_name || 'Игрок');
             }
             return `${protocol}//${host}/ws/lucky?${params.toString()}`;
         }
@@ -1876,7 +1876,7 @@
                             cashout_multiplier: null,
                         });
                     }
-                    if (msg.telegram_id === state.telegramId) {
+                    if (msg.telegram_id === state.user.id) {
                         luckyState.myBet = {
                             amount: msg.amount,
                             cashedOut: false,
@@ -1894,7 +1894,7 @@
                         player.cashout_multiplier = msg.multiplier;
                         player.win_amount = msg.win_amount;
                     }
-                    if (msg.telegram_id === state.telegramId && luckyState.myBet) {
+                    if (msg.telegram_id === state.user.id && luckyState.myBet) {
                         luckyState.myBet.cashedOut = true;
                         luckyState.myBet.cashoutMultiplier = msg.multiplier;
                         luckyState.myBet.winAmount = msg.win_amount;
@@ -1944,7 +1944,7 @@
                     cashout_multiplier: b.cashout_multiplier,
                     win_amount: b.win_amount,
                 }));
-                const my = luckyState.players.find(p => p.telegram_id === state.telegramId);
+                const my = luckyState.players.find(p => p.telegram_id === state.user.id);
                 if (my) {
                     luckyState.myBet = {
                         amount: my.amount,
