@@ -1779,52 +1779,360 @@
         }
 
         // Lucky Jet — WebSocket Multiplayer Crash Game
+        class LuckyJetCanvas {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.state = 'WAITING'; // WAITING | FLYING | CRASHED
+                this.multiplier = 1.0;
+                this.countdown = 7.0;
+                this.crashMultiplier = null;
+                this.cashoutInfo = null; // { amount, multiplier, winAmount }
+
+                this.rocket = {
+                    introProgress: 0,
+                    phase: 0,
+                    hover: 0,
+                    crashFlyProgress: 0,
+                    crashedAt: 0,
+                    x: 0,
+                    y: 0,
+                    angle: -0.3,
+                    scale: 1
+                };
+
+                this.bgOffsetX = 0;
+                this.bgOffsetY = 0;
+                this.lastFrameTime = performance.now();
+                this.animId = null;
+
+                this.stars = [];
+                for (let i = 0; i < 80; i++) {
+                    this.stars.push({
+                        x: Math.random(),
+                        y: Math.random(),
+                        size: 0.5 + Math.random() * 2,
+                        speed: 0.2 + Math.random() * 0.8,
+                        alpha: 0.2 + Math.random() * 0.8
+                    });
+                }
+
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+                this.start();
+            }
+
+            resize() {
+                const rect = this.canvas.getBoundingClientRect();
+                this.canvas.width = rect.width;
+                this.canvas.height = rect.height;
+            }
+
+            start() {
+                if (this.animId) cancelAnimationFrame(this.animId);
+                this.lastFrameTime = performance.now();
+                this.animId = requestAnimationFrame((t) => this.frame(t));
+            }
+
+            setState(newState) {
+                if (this.state === newState) return;
+                this.state = newState;
+
+                if (newState === 'WAITING') {
+                    this.rocket.introProgress = 0;
+                    this.rocket.crashFlyProgress = 0;
+                    this.cashoutInfo = null;
+                } else if (newState === 'FLYING') {
+                    this.rocket.introProgress = 0;
+                    this.rocket.crashFlyProgress = 0;
+                    this.lastFrameTime = performance.now();
+                } else if (newState === 'CRASHED') {
+                    this.rocket.crashedAt = performance.now();
+                }
+            }
+
+            setMultiplier(val) {
+                this.multiplier = val;
+            }
+
+            setCountdown(val) {
+                this.countdown = val;
+            }
+
+            setCrashMultiplier(val) {
+                this.crashMultiplier = val;
+            }
+
+            setCashout(amount, multiplier, winAmount) {
+                this.cashoutInfo = { amount, multiplier, winAmount };
+            }
+
+            easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+            easeInQuad(t) { return t * t; }
+
+            frame(timestamp) {
+                const dt = timestamp - this.lastFrameTime;
+                this.lastFrameTime = timestamp;
+
+                this.updateRocket(dt, timestamp);
+                this.drawBackground();
+                this.drawRocket();
+                this.drawOverlay();
+
+                this.animId = requestAnimationFrame((t) => this.frame(t));
+            }
+
+            updateRocket(dt, timestamp) {
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+
+                if (this.state === 'WAITING') {
+                    this.rocket.phase += dt * 0.002;
+                    this.rocket.hover += dt * 0.003;
+
+                    // Прогрев двигателя: слегка подрагивает
+                    const shake = Math.sin(timestamp * 0.02) * 1.5;
+                    this.rocket.x = w * 0.12 + shake;
+                    this.rocket.y = h * 0.75 + Math.cos(this.rocket.hover) * 3;
+                    this.rocket.angle = -0.3 + Math.sin(this.rocket.phase) * 0.04;
+                    this.rocket.scale = 1;
+
+                } else if (this.state === 'FLYING') {
+                    if (this.rocket.introProgress < 1) {
+                        this.rocket.introProgress += dt / 2500;
+                        if (this.rocket.introProgress > 1) this.rocket.introProgress = 1;
+                    }
+
+                    this.rocket.phase += dt * 0.003;
+                    this.rocket.hover += dt * 0.004;
+
+                    const t = this.easeOutCubic(this.rocket.introProgress);
+                    const baseX = w * (0.12 + t * 0.60);
+                    const baseY = h * (0.75 - t * 0.40);
+
+                    this.rocket.x = baseX + Math.sin(this.rocket.phase) * (w * 0.03);
+                    this.rocket.y = baseY + Math.sin(this.rocket.hover) * 8;
+                    this.rocket.angle = -0.3 - t * 0.25 + Math.sin(this.rocket.phase) * 0.06;
+                    this.rocket.scale = 1 + Math.max(0, (this.multiplier - 1) * 0.015);
+
+                } else if (this.state === 'CRASHED') {
+                    const elapsed = timestamp - this.rocket.crashedAt;
+                    this.rocket.crashFlyProgress = Math.min(1, elapsed / 300);
+                    const t = this.easeInQuad(this.rocket.crashFlyProgress);
+
+                    this.rocket.x = w * (0.72 + t * 0.45);
+                    this.rocket.y = h * (0.35 - t * 0.65);
+                    this.rocket.angle = -0.55 - t * 0.5;
+                    this.rocket.scale = Math.max(0.1, 1 - t * 0.3);
+                }
+            }
+
+            drawBackground() {
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+                const ctx = this.ctx;
+
+                const grad = ctx.createLinearGradient(0, 0, 0, h);
+                grad.addColorStop(0, 'rgba(10,8,20,0.98)');
+                grad.addColorStop(1, 'rgba(20,16,38,0.99)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, w, h);
+
+                const speed = Math.max(0.3, (this.multiplier - 1) * 0.35 + 0.3);
+                this.bgOffsetX += speed * 1.2;
+                this.bgOffsetY += speed * 0.7;
+
+                // Сетка
+                ctx.strokeStyle = 'rgba(157, 78, 221, 0.12)';
+                ctx.lineWidth = 1;
+                const gridSize = 40;
+                const offX = -(this.bgOffsetX % gridSize);
+                const offY = -(this.bgOffsetY % gridSize);
+
+                for (let x = offX; x < w; x += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, h);
+                    ctx.stroke();
+                }
+                for (let y = offY; y < h; y += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(w, y);
+                    ctx.stroke();
+                }
+
+                // Звёзды
+                this.stars.forEach(star => {
+                    let sx = (star.x * w - this.bgOffsetX * star.speed * 0.5) % w;
+                    let sy = (star.y * h + this.bgOffsetY * star.speed * 0.3) % h;
+                    if (sx < 0) sx += w;
+                    if (sy < 0) sy += h;
+                    ctx.fillStyle = `rgba(200, 220, 255, ${star.alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, star.size, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+
+                // Линия горизонта
+                ctx.strokeStyle = 'rgba(0, 245, 255, 0.4)';
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = 'rgba(0, 245, 255, 0.5)';
+                ctx.beginPath();
+                ctx.moveTo(0, h - 1);
+                ctx.lineTo(w, h - 1);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            }
+
+            drawRocket() {
+                const ctx = this.ctx;
+                ctx.save();
+                ctx.translate(this.rocket.x, this.rocket.y);
+                ctx.rotate(this.rocket.angle);
+                ctx.scale(this.rocket.scale, this.rocket.scale);
+
+                const flameLength = 25 + Math.random() * 15;
+                const flameGrad = ctx.createLinearGradient(-20, 0, -20 - flameLength, 0);
+                flameGrad.addColorStop(0, 'rgba(0, 245, 255, 0.9)');
+                flameGrad.addColorStop(0.4, 'rgba(157, 78, 221, 0.6)');
+                flameGrad.addColorStop(0.8, 'rgba(255, 100, 50, 0.3)');
+                flameGrad.addColorStop(1, 'rgba(255, 0, 80, 0)');
+                ctx.fillStyle = flameGrad;
+                ctx.beginPath();
+                ctx.moveTo(-14, -6);
+                ctx.lineTo(-14 - flameLength, 0);
+                ctx.lineTo(-14, 6);
+                ctx.fill();
+
+                // Искры в хвосте
+                for (let i = 0; i < 6; i++) {
+                    const sparkX = -14 - Math.random() * flameLength;
+                    const sparkY = (Math.random() - 0.5) * 8;
+                    const sparkSize = 1 + Math.random() * 2;
+                    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,245,255,0.8)' : 'rgba(255,100,50,0.7)';
+                    ctx.beginPath();
+                    ctx.arc(sparkX, sparkY, sparkSize, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Тело ракеты
+                ctx.fillStyle = '#e0e0ff';
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 22, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Кабина
+                ctx.fillStyle = 'rgba(0, 245, 255, 0.9)';
+                ctx.beginPath();
+                ctx.arc(10, -2, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Крылья
+                ctx.fillStyle = '#9d4edd';
+                ctx.beginPath();
+                ctx.moveTo(-8, 6);
+                ctx.lineTo(-18, 18);
+                ctx.lineTo(-4, 10);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(-8, -6);
+                ctx.lineTo(-18, -18);
+                ctx.lineTo(-4, -10);
+                ctx.fill();
+
+                // Неоновая аура
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = 'rgba(0, 245, 255, 0.7)';
+                ctx.strokeStyle = 'rgba(0, 245, 255, 0.4)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 24, 12, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                ctx.restore();
+            }
+
+            drawOverlay() {
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+                const ctx = this.ctx;
+
+                if (this.state === 'WAITING') {
+                    ctx.save();
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    ctx.font = 'bold 22px Segoe UI, sans-serif';
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = 'rgba(157, 78, 221, 0.8)';
+                    ctx.fillText('До старта: ' + this.countdown.toFixed(1) + 'с', w / 2, h * 0.25);
+                    ctx.shadowBlur = 0;
+
+                    ctx.font = '14px Segoe UI, sans-serif';
+                    ctx.fillStyle = 'rgba(200, 200, 255, 0.6)';
+                    ctx.fillText('Делайте ставки', w / 2, h * 0.32);
+                    ctx.restore();
+                }
+
+                if (this.state === 'FLYING') {
+                    ctx.save();
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    const fontSize = 42 + Math.max(0, (this.multiplier - 1)) * 2;
+                    ctx.font = `bold ${fontSize}px Segoe UI, sans-serif`;
+
+                    const glow = 10 + Math.max(0, (this.multiplier - 1)) * 2;
+                    ctx.shadowBlur = glow;
+                    ctx.shadowColor = 'rgba(0, 245, 255, 0.9)';
+                    ctx.fillStyle = '#00f5ff';
+                    ctx.fillText(this.multiplier.toFixed(2) + 'x', w / 2, h * 0.25);
+                    ctx.shadowBlur = 0;
+
+                    if (this.cashoutInfo) {
+                        ctx.font = 'bold 16px Segoe UI, sans-serif';
+                        ctx.shadowBlur = 8;
+                        ctx.shadowColor = 'rgba(0, 255, 136, 0.7)';
+                        ctx.fillStyle = '#00ff88';
+                        ctx.fillText(`Забрано ${formatMoney(this.cashoutInfo.winAmount)} TSC`, w / 2, h * 0.36);
+                        ctx.shadowBlur = 0;
+                    }
+                    ctx.restore();
+                }
+
+                if (this.state === 'CRASHED') {
+                    ctx.save();
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    ctx.font = 'bold 42px Segoe UI, sans-serif';
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = 'rgba(255, 0, 80, 0.9)';
+                    ctx.fillStyle = '#ff5080';
+                    ctx.fillText('УЛЕТЕЛА!', w / 2, h * 0.35);
+                    ctx.shadowBlur = 0;
+
+                    if (this.crashMultiplier) {
+                        ctx.font = 'bold 22px Segoe UI, sans-serif';
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                        ctx.fillText(this.crashMultiplier.toFixed(2) + 'x', w / 2, h * 0.48);
+                    }
+                    ctx.restore();
+                }
+            }
+        }
+
+        // Инициализация Canvas
         const luckyCanvas = document.getElementById('luckyCanvas');
-        const luckyCtx = luckyCanvas.getContext('2d');
+        const luckyCanvasApp = new LuckyJetCanvas(luckyCanvas);
         const crashStatusEl = document.getElementById('crashStatus');
         const crashMultiplierEl = document.getElementById('crashMultiplier');
         const luckyCountdownEl = document.getElementById('luckyCountdown');
         const luckyPlayersEl = document.getElementById('luckyPlayers');
-
-        function resizeLuckyCanvas() {
-            const rect = luckyCanvas.getBoundingClientRect();
-            luckyCanvas.width = rect.width;
-            luckyCanvas.height = rect.height;
-        }
-        resizeLuckyCanvas();
-        window.addEventListener('resize', resizeLuckyCanvas);
-
-        // Звёзды для фона
-        const stars = [];
-        for (let i = 0; i < 80; i++) {
-            stars.push({
-                x: Math.random(),
-                y: Math.random(),
-                size: 0.5 + Math.random() * 2,
-                speed: 0.2 + Math.random() * 0.8,
-                alpha: 0.2 + Math.random() * 0.8
-            });
-        }
-
-        // Состояние игры
-        let luckyState = {
-            connected: false,
-            roundId: null,
-            state: 'betting',         // betting | flying | crashed | finished
-            multiplier: 1.0,
-            crashMultiplier: null,
-            countdown: 0,
-            myBet: null,              // { amount, cashedOut, cashoutMultiplier, winAmount }
-            players: [],
-            animId: null,
-            crashedAt: 0,
-            rocket: { x: 0.12, y: 0.75, phase: 0, hover: 0 },
-            bgOffsetX: 0,
-            bgOffsetY: 0,
-            lastFrameTime: 0,
-            introProgress: 0,         // 0..1 взлёт в центр
-            crashFlyProgress: 0,      // 0..1 улет за экран
-        };
 
         // WebSocket соединение
         let luckyWs = null;
@@ -1849,7 +2157,7 @@
                 luckyWs = new WebSocket(getLuckyWsUrl());
 
                 luckyWs.onopen = () => {
-                    luckyState.connected = true;
+                    luckyCanvasApp.setState('WAITING');
                     console.log('[Lucky WS] connected');
                 };
 
@@ -1859,7 +2167,6 @@
                 };
 
                 luckyWs.onclose = () => {
-                    luckyState.connected = false;
                     console.log('[Lucky WS] disconnected');
                     if (luckyWsReconnectTimer) clearTimeout(luckyWsReconnectTimer);
                     luckyWsReconnectTimer = setTimeout(connectLuckyWs, 2000);
@@ -1880,30 +2187,23 @@
                     break;
 
                 case 'round_start':
-                    luckyState.roundId = msg.round_id;
-                    luckyState.state = 'betting';
-                    luckyState.multiplier = 1.0;
-                    luckyState.crashMultiplier = null;
-                    luckyState.myBet = null;
-                    luckyState.players = [];
-                    luckyState.introProgress = 0;
-                    luckyState.crashFlyProgress = 0;
-                    luckyState.countdown = msg.countdown_seconds || 7;
-                    updateLuckyUI();
+                    luckyCanvasApp.setState('WAITING');
+                    luckyCanvasApp.setMultiplier(1.0);
+                    luckyCanvasApp.setCrashMultiplier(null);
+                    luckyCanvasApp.setCashout(null, null, null);
+                    luckyCanvasApp.setCountdown(msg.countdown_seconds || 7);
+                    updateLuckyUI('WAITING', 1.0, msg.countdown_seconds || 7);
                     break;
 
                 case 'flight_start':
-                    luckyState.state = 'flying';
-                    luckyState.crashMultiplier = msg.crash_multiplier;
-                    luckyState.lastFrameTime = performance.now();
-                    startLuckyAnimation();
-                    updateLuckyUI();
+                    luckyCanvasApp.setState('FLYING');
+                    luckyCanvasApp.setCrashMultiplier(msg.crash_multiplier);
+                    updateLuckyUI('FLYING', 1.0, 0, msg.crash_multiplier);
                     break;
 
                 case 'tick':
-                    if (luckyState.state === 'flying') {
-                        luckyState.multiplier = msg.multiplier;
-                    }
+                    luckyCanvasApp.setMultiplier(msg.multiplier);
+                    updateLuckyUI('FLYING', msg.multiplier, 0, luckyCanvasApp.crashMultiplier);
                     break;
 
                 case 'bet_placed':
@@ -1938,6 +2238,7 @@
                         luckyState.myBet.cashedOut = true;
                         luckyState.myBet.cashoutMultiplier = msg.multiplier;
                         luckyState.myBet.winAmount = msg.win_amount;
+                        luckyCanvasApp.setCashout(luckyState.myBet.amount, msg.multiplier, msg.win_amount);
                         state.balance = msg.balance || state.balance;
                         renderBalance();
                         showToast(`Забрано ${formatMoney(msg.win_amount)} TSC при x${msg.multiplier}`);
@@ -1948,14 +2249,10 @@
                     break;
 
                 case 'crash':
-                    luckyState.state = 'crashed';
-                    luckyState.crashMultiplier = msg.crash_multiplier;
-                    luckyState.crashedAt = performance.now();
-                    crashMultiplierEl.textContent = 'УЛЕТЕЛА ' + msg.crash_multiplier.toFixed(2) + 'x';
-                    crashStatusEl.textContent = 'Улетела!';
-                    crashStatusEl.classList.add('show');
+                    luckyCanvasApp.setState('CRASHED');
+                    luckyCanvasApp.setCrashMultiplier(msg.crash_multiplier);
+                    updateLuckyUI('CRASHED', msg.crash_multiplier, 0, msg.crash_multiplier);
                     if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
-                    updateLuckyUI();
                     loadHistory('lucky_jet', luckyHistoryEl);
                     break;
 
@@ -1972,35 +2269,47 @@
 
         function syncLuckyState(round) {
             luckyState.roundId = round.round_id;
-            luckyState.state = round.state;
-            luckyState.multiplier = round.current_multiplier;
-            luckyState.crashMultiplier = round.crash_multiplier;
-            if (round.bets) {
-                luckyState.players = round.bets.map(b => ({
-                    telegram_id: b.telegram_id,
-                    first_name: b.first_name,
-                    amount: b.amount,
-                    cashed_out: b.cashed_out,
-                    cashout_multiplier: b.cashout_multiplier,
-                    win_amount: b.win_amount,
-                }));
-                const my = luckyState.players.find(p => p.telegram_id === state.user.id);
-                if (my) {
-                    luckyState.myBet = {
-                        amount: my.amount,
-                        cashedOut: my.cashed_out,
-                        cashoutMultiplier: my.cashout_multiplier,
-                        winAmount: my.win_amount,
-                    };
+            luckyState.players = (round.bets || []).map(b => ({
+                telegram_id: b.telegram_id,
+                first_name: b.first_name,
+                amount: b.amount,
+                cashed_out: b.cashed_out,
+                cashout_multiplier: b.cashout_multiplier,
+                win_amount: b.win_amount,
+            }));
+
+            const my = luckyState.players.find(p => p.telegram_id === state.user.id);
+            if (my) {
+                luckyState.myBet = {
+                    amount: my.amount,
+                    cashedOut: my.cashed_out,
+                    cashoutMultiplier: my.cashout_multiplier,
+                    winAmount: my.win_amount,
+                };
+                if (my.cashed_out) {
+                    luckyCanvasApp.setCashout(my.amount, my.cashout_multiplier, my.win_amount);
                 }
             }
-            updateLuckyUI();
-            if (round.state === 'flying') {
-                startLuckyAnimation();
+
+            if (round.state === 'betting') {
+                luckyCanvasApp.setState('WAITING');
+                luckyCanvasApp.setMultiplier(round.current_multiplier);
+                luckyCanvasApp.setCrashMultiplier(null);
+                updateLuckyUI('WAITING', round.current_multiplier, luckyCanvasApp.countdown);
+            } else if (round.state === 'flying') {
+                luckyCanvasApp.setState('FLYING');
+                luckyCanvasApp.setMultiplier(round.current_multiplier);
+                luckyCanvasApp.setCrashMultiplier(round.crash_multiplier);
+                updateLuckyUI('FLYING', round.current_multiplier, 0, round.crash_multiplier);
+            } else if (round.state === 'crashed' || round.state === 'finished') {
+                luckyCanvasApp.setState('CRASHED');
+                luckyCanvasApp.setMultiplier(round.current_multiplier);
+                luckyCanvasApp.setCrashMultiplier(round.crash_multiplier);
+                updateLuckyUI('CRASHED', round.current_multiplier, 0, round.crash_multiplier);
             }
         }
 
-        function updateLuckyUI() {
+        function updateLuckyUI(stateName, multiplier, countdown, crashMultiplier) {
             // Кнопка
             if (luckyState.state === 'betting') {
                 const canBet = !luckyState.myBet;
@@ -2023,22 +2332,22 @@
                 luckyPlayBtn.className = 'btn btn-cyan';
             }
 
-            // Счётчик
-            if (luckyState.state === 'betting') {
-                luckyCountdownEl.style.display = 'block';
-                luckyCountdownEl.textContent = 'Приём ставок: ' + luckyState.countdown + 'с';
+            // Текст под Canvas — больше не нужен, т.к. рисуется на Canvas
+            if (stateName === 'WAITING') {
+                crashStatusEl.textContent = 'До старта: ' + (countdown || luckyCanvasApp.countdown).toFixed(1) + 'с';
                 crashMultiplierEl.style.display = 'none';
-            } else {
-                luckyCountdownEl.style.display = 'none';
+                crashStatusEl.classList.add('show');
+            } else if (stateName === 'FLYING') {
+                crashMultiplierEl.textContent = (multiplier || luckyCanvasApp.multiplier).toFixed(2) + 'x';
                 crashMultiplierEl.style.display = 'block';
-            }
-
-            if (luckyState.state === 'flying') {
-                crashMultiplierEl.textContent = luckyState.multiplier.toFixed(2) + 'x';
                 crashStatusEl.classList.remove('show');
+            } else if (stateName === 'CRASHED') {
+                crashMultiplierEl.textContent = 'УЛЕТЕЛА ' + (crashMultiplier || luckyCanvasApp.crashMultiplier).toFixed(2) + 'x';
+                crashMultiplierEl.style.display = 'block';
+                crashStatusEl.textContent = 'Улетела!';
+                crashStatusEl.classList.add('show');
             }
 
-            // Игроки
             renderLuckyPlayers();
         }
 
@@ -2057,188 +2366,9 @@
             });
         }
 
-        // Анимация Canvas
-        function startLuckyAnimation() {
-            if (luckyState.animId) cancelAnimationFrame(luckyState.animId);
-            luckyState.lastFrameTime = performance.now();
-            luckyState.animId = requestAnimationFrame(animateLuckyFrame);
-        }
-
-        function animateLuckyFrame(timestamp) {
-            const dt = timestamp - luckyState.lastFrameTime;
-            luckyState.lastFrameTime = timestamp;
-
-            if (luckyState.state === 'flying') {
-                // Взлёт в центр (2.5 секунды)
-                if (luckyState.introProgress < 1) {
-                    luckyState.introProgress += dt / 2500;
-                    if (luckyState.introProgress > 1) luckyState.introProgress = 1;
-                }
-
-                // Покачивание
-                luckyState.rocket.phase += dt * 0.003;
-                luckyState.rocket.hover += dt * 0.004;
-
-                // Фон
-                drawLuckyBackground(luckyState.multiplier);
-
-                // Позиция ракеты
-                const w = luckyCanvas.width;
-                const h = luckyCanvas.height;
-                const t = easeOutCubic(luckyState.introProgress);
-                const rx = w * (0.12 + t * 0.60 + Math.sin(luckyState.rocket.phase) * 0.03);
-                const ry = h * (0.75 - t * 0.40 + Math.cos(luckyState.rocket.hover) * 0.04);
-                const angle = -0.3 - t * 0.25 + Math.sin(luckyState.rocket.phase) * 0.06;
-                const scale = 1 + Math.max(0, (luckyState.multiplier - 1) * 0.015);
-
-                drawRocket(rx, ry, angle, scale);
-
-                luckyState.animId = requestAnimationFrame(animateLuckyFrame);
-
-            } else if (luckyState.state === 'crashed') {
-                // Улет за пределы экрана
-                const elapsed = timestamp - luckyState.crashedAt;
-                luckyState.crashFlyProgress = Math.min(1, elapsed / 300);
-                const t = easeInQuad(luckyState.crashFlyProgress);
-
-                drawLuckyBackground(luckyState.crashMultiplier || luckyState.multiplier);
-
-                const w = luckyCanvas.width;
-                const h = luckyCanvas.height;
-                const rx = w * (0.72 + t * 0.45);
-                const ry = h * (0.35 - t * 0.65);
-                const angle = -0.55 - t * 0.5;
-                const scale = 1 - t * 0.3;
-
-                drawRocket(rx, ry, angle, Math.max(0.1, scale));
-
-                if (luckyState.crashFlyProgress < 1) {
-                    luckyState.animId = requestAnimationFrame(animateLuckyFrame);
-                }
-            } else {
-                // betting / finished — стартовая позиция
-                drawLuckyBackground(1.0);
-                drawRocket(luckyCanvas.width * 0.12, luckyCanvas.height * 0.75, -0.3, 1);
-            }
-
-            updateLuckyUI();
-        }
-
-        function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
-        function easeInQuad(t) { return t * t; }
-
-        function drawLuckyBackground(multiplier) {
-            const w = luckyCanvas.width;
-            const h = luckyCanvas.height;
-            const ctx = luckyCtx;
-
-            const grad = ctx.createLinearGradient(0, 0, 0, h);
-            grad.addColorStop(0, 'rgba(10,8,20,0.95)');
-            grad.addColorStop(1, 'rgba(20,16,38,0.98)');
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, w, h);
-
-            const speed = Math.max(0.3, (multiplier - 1) * 0.35 + 0.3);
-            luckyState.bgOffsetX += speed * 1.2;
-            luckyState.bgOffsetY += speed * 0.7;
-
-            ctx.strokeStyle = 'rgba(157, 78, 221, 0.12)';
-            ctx.lineWidth = 1;
-            const gridSize = 40;
-            const offX = -(luckyState.bgOffsetX % gridSize);
-            const offY = -(luckyState.bgOffsetY % gridSize);
-
-            for (let x = offX; x < w; x += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, h);
-                ctx.stroke();
-            }
-            for (let y = offY; y < h; y += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(w, y);
-                ctx.stroke();
-            }
-
-            stars.forEach(star => {
-                let sx = (star.x * w - luckyState.bgOffsetX * star.speed * 0.5) % w;
-                let sy = (star.y * h + luckyState.bgOffsetY * star.speed * 0.3) % h;
-                if (sx < 0) sx += w;
-                if (sy < 0) sy += h;
-                ctx.fillStyle = `rgba(200, 220, 255, ${star.alpha})`;
-                ctx.beginPath();
-                ctx.arc(sx, sy, star.size, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            ctx.strokeStyle = 'rgba(0, 245, 255, 0.4)';
-            ctx.lineWidth = 2;
-            ctx.shadowBlur = 12;
-            ctx.shadowColor = 'rgba(0, 245, 255, 0.5)';
-            ctx.beginPath();
-            ctx.moveTo(0, h - 1);
-            ctx.lineTo(w, h - 1);
-            ctx.stroke();
-            ctx.shadowBlur = 0;
-        }
-
-        function drawRocket(x, y, angle, scale = 1) {
-            const ctx = luckyCtx;
-            ctx.save();
-            ctx.translate(x, y);
-            ctx.rotate(angle);
-            ctx.scale(scale, scale);
-
-            const flameLength = 25 + Math.random() * 10;
-            const grad = ctx.createLinearGradient(-20, 0, -20 - flameLength, 0);
-            grad.addColorStop(0, 'rgba(0, 245, 255, 0.8)');
-            grad.addColorStop(0.5, 'rgba(157, 78, 221, 0.5)');
-            grad.addColorStop(1, 'rgba(255, 0, 80, 0)');
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.moveTo(-14, -6);
-            ctx.lineTo(-14 - flameLength, 0);
-            ctx.lineTo(-14, 6);
-            ctx.fill();
-
-            ctx.fillStyle = '#e0e0ff';
-            ctx.beginPath();
-            ctx.ellipse(0, 0, 22, 10, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = 'rgba(0, 245, 255, 0.9)';
-            ctx.beginPath();
-            ctx.arc(10, -2, 6, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = '#9d4edd';
-            ctx.beginPath();
-            ctx.moveTo(-8, 6);
-            ctx.lineTo(-16, 16);
-            ctx.lineTo(-4, 10);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(-8, -6);
-            ctx.lineTo(-16, -16);
-            ctx.lineTo(-4, -10);
-            ctx.fill();
-
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = 'rgba(0, 245, 255, 0.7)';
-            ctx.strokeStyle = 'rgba(0, 245, 255, 0.4)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.ellipse(0, 0, 24, 12, 0, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.shadowBlur = 0;
-
-            ctx.restore();
-        }
-
         // Кнопка ставки / вывода
         luckyPlayBtn.addEventListener('click', () => {
-            if (!luckyState.connected) {
+            if (!luckyWs || luckyWs.readyState !== WebSocket.OPEN) {
                 showToast('Нет соединения с сервером');
                 return;
             }
@@ -2248,32 +2378,38 @@
                     showToast('Ставка уже принята');
                     return;
                 }
-                if (state.balance < state.luckyChip) {
+
+                const amount = state.luckyChip;
+                if (state.balance < amount) {
                     showToast('Недостаточно монет');
                     return;
                 }
-                luckyWs.send(JSON.stringify({
-                    action: 'place_bet',
-                    amount: state.luckyChip,
-                }));
+
+                luckyWs.send(JSON.stringify({ action: 'place_bet', amount }));
                 luckyPlayBtn.disabled = true;
                 luckyPlayBtn.textContent = 'Ставка...';
+
             } else if (luckyState.state === 'flying') {
                 if (!luckyState.myBet || luckyState.myBet.cashedOut) {
                     showToast('Нет активной ставки');
                     return;
                 }
+
                 luckyWs.send(JSON.stringify({ action: 'cashout' }));
                 luckyPlayBtn.disabled = true;
+                luckyPlayBtn.textContent = 'Забираем...';
             }
         });
 
-        // Подключаемся к серверу при открытии экрана
-        document.addEventListener('DOMContentLoaded', () => {
-            resizeLuckyCanvas();
-            drawLuckyBackground(1.0);
-            drawRocket(luckyCanvas.width * 0.12, luckyCanvas.height * 0.75, -0.3, 1);
-        });
+        // Счётчик обратного отсчёта
+        setInterval(() => {
+            if (luckyCanvasApp.state === 'WAITING' && luckyCanvasApp.countdown > 0) {
+                luckyCanvasApp.setCountdown(Math.max(0, luckyCanvasApp.countdown - 0.1));
+                if (luckyState.state === 'betting') {
+                    crashStatusEl.textContent = 'До старта: ' + luckyCanvasApp.countdown.toFixed(1) + 'с';
+                }
+            }
+        }, 100);
 
         // Открываем WebSocket, когда заходим на экран Lucky Jet
         const originalNavigateTo = navigateTo;
