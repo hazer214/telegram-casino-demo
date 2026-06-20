@@ -2444,16 +2444,6 @@
             }
         }, 100);
 
-        // Открываем WebSocket, когда заходим на экран Lucky Jet
-        const originalNavigateTo = navigateTo;
-        navigateTo = function(screenId) {
-            originalNavigateTo(screenId);
-            if (screenId === 'luckyjet') {
-                connectLuckyWs();
-                loadHistory('lucky_jet', luckyHistoryEl);
-            }
-        };
-
         // Slots — серверная версия
         const slotIcons = ['🍒', '🍋', '🔔', '💎', '7️⃣', '🍀', '👑'];
         const slotsSpinBtn = document.getElementById('slotsSpinBtn');
