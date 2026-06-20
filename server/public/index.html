@@ -1779,6 +1779,14 @@
         }
 
         // Lucky Jet — WebSocket Multiplayer Crash Game
+
+        // Состояние игры (список игроков, моя ставка)
+        let luckyState = {
+            roundId: null,
+            myBet: null,
+            players: [],
+        };
+
         class LuckyJetCanvas {
             constructor(canvas) {
                 this.canvas = canvas;
