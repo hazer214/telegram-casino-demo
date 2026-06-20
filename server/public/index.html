@@ -2279,7 +2279,7 @@
         const originalNavigateTo = navigateTo;
         navigateTo = function(screenId) {
             originalNavigateTo(screenId);
-            if (screenId === 'lucky') {
+            if (screenId === 'luckyjet') {
                 connectLuckyWs();
                 loadHistory('lucky_jet', luckyHistoryEl);
             }
