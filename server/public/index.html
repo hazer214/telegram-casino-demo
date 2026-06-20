@@ -7,7 +7,9 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Telegram Casino</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
     <style>
         :root {
             --bg-deep: #0a0814;
@@ -1326,9 +1328,23 @@
                 const fallbackUserId = urlParams.get('user_id');
                 const fallbackFirstName = urlParams.get('first_name');
 
-                console.log('=== Telegram WebApp Debug ===');
-                console.log('initData length:', initDataLen);
-                console.log('URL params:', { user_id: fallbackUserId, first_name: fallbackFirstName });
+                // Максимально подробный debug
+                const debugInfo = {
+                    hasTelegram: !!window.Telegram,
+                    hasWebApp: !!(window.Telegram && window.Telegram.WebApp),
+                    initDataLen,
+                    initDataFirst50: initData.slice(0, 50),
+                    initDataUnsafeKeys: Object.keys(initDataUnsafe),
+                    userFromInitData: initDataUnsafe.user,
+                    urlUserId: fallbackUserId,
+                    urlFirstName: fallbackFirstName,
+                    fullUrl: window.location.href,
+                    platform: tg.platform,
+                    version: tg.version
+                };
+                console.log('=== Telegram WebApp Debug ===', debugInfo);
+
+                updateDebugPanel(`tg=${!!window.Telegram.WebApp} initLen=${initDataLen} user=${user?.id || 'no'} urlId=${fallbackUserId || 'no'}`);
 
                 if (user && user.id) {
                     state.user = {
@@ -1345,8 +1361,7 @@
                         photo_url: ''
                     };
                 } else {
-                    console.warn('Telegram user data missing!');
-                    updateDebugPanel(`⚠️ initData=${initDataLen} chars, no user_id in URL`);
+                    console.warn('Telegram user data missing!', debugInfo);
                     dashboardName.textContent = 'Игрок';
                     dashboardAvatar.innerHTML = 'ИГ';
                     state.user = { id: 0, first_name: 'Игрок', username: '', photo_url: '' };
