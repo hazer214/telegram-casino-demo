@@ -2276,10 +2276,10 @@
         });
 
         // Открываем WebSocket, когда заходим на экран Lucky Jet
-        const originalShowScreen = showScreen;
-        showScreen = function(name) {
-            originalShowScreen(name);
-            if (name === 'lucky') {
+        const originalNavigateTo = navigateTo;
+        navigateTo = function(screenId) {
+            originalNavigateTo(screenId);
+            if (screenId === 'lucky') {
                 connectLuckyWs();
                 loadHistory('lucky_jet', luckyHistoryEl);
             }
