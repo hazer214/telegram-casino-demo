@@ -1,4 +1,5 @@
 """FastAPI приложение: эндпоинты и валидация Telegram initData."""
+import asyncio
 import hashlib
 import hmac
 import json
@@ -11,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
@@ -29,6 +30,7 @@ from server.database import (
     CLAIM_COOLDOWN_SECONDS,
     lucky_jet,
 )
+from server.lucky_jet_ws import lucky_manager
 
 # ---------------------------------------------------------------------------
 # Хранилище активных раундов Lucky Jet (in-memory для демо)
@@ -256,9 +258,16 @@ class SlotsSpinRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Инициализируем БД при старте сервера."""
+    """Инициализируем БД при старте сервера и запускаем игровой цикл Lucky Jet."""
     init_db()
+    await lucky_manager.start_game_loop()
     yield
+    if lucky_manager.game_loop_task:
+        lucky_manager.game_loop_task.cancel()
+        try:
+            await lucky_manager.game_loop_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="Telegram Mini App Casino", lifespan=lifespan)
@@ -270,6 +279,98 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+async def get_user_from_websocket(websocket: WebSocket, db: Session):
+    """Определяет пользователя из query-параметров WebSocket (initData или user_id)."""
+    init_data = websocket.query_params.get("init_data") or ""
+    user_id = websocket.query_params.get("user_id")
+    first_name = websocket.query_params.get("first_name") or "Игрок"
+
+    user_data = None
+    if init_data:
+        user_data = validate_init_data(init_data, BOT_TOKEN)
+
+    if user_data:
+        return get_or_create_user(
+            db,
+            telegram_id=user_data.get("id"),
+            username=user_data.get("username"),
+            first_name=user_data.get("first_name"),
+        )
+
+    if user_id and user_id.isdigit():
+        return get_or_create_user(
+            db,
+            telegram_id=int(user_id),
+            username=None,
+            first_name=first_name,
+        )
+
+    if DEV_MODE:
+        return get_or_create_user(
+            db,
+            telegram_id=123456789,
+            username="demo_user",
+            first_name="Демо Игрок",
+        )
+
+    raise HTTPException(status_code=403, detail="Не удалось идентифицировать пользователя")
+
+
+@app.websocket("/ws/lucky")
+async def lucky_jet_websocket(websocket: WebSocket, db: Session = Depends(get_db)):
+    """WebSocket для синхронного multiplayer Lucky Jet."""
+    user = await get_user_from_websocket(websocket, db)
+
+    await websocket.accept()
+    await lucky_manager.connect(websocket)
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            action = msg.get("action")
+
+            if action == "place_bet":
+                amount = int(msg.get("amount", 0))
+                if amount > 0:
+                    try:
+                        await lucky_manager.place_bet(user.telegram_id, user.first_name or "Игрок", amount, db)
+                        # Отправляем обновлённый баланс только этому клиенту
+                        db.refresh(user)
+                        await websocket.send_text(json.dumps({
+                            "type": "balance_update",
+                            "balance": user.balance,
+                        }))
+                    except Exception as e:
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "message": str(e),
+                        }))
+
+            elif action == "cashout":
+                try:
+                    result = await lucky_manager.cashout(user.telegram_id, db)
+                    await websocket.send_text(json.dumps({
+                        "type": "cashout_result",
+                        **result,
+                    }))
+                except Exception as e:
+                    await websocket.send_text(json.dumps({
+                        "type": "error",
+                        "message": str(e),
+                    }))
+
+    except WebSocketDisconnect:
+        await lucky_manager.disconnect(websocket)
+    except Exception as e:
+        print(f"[Lucky WebSocket] error: {e}")
+        await lucky_manager.disconnect(websocket)
 
 
 @app.get("/")

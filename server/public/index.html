@@ -850,6 +850,45 @@
             opacity: 1;
         }
 
+        .crash-countdown {
+            position: absolute;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--accent-gold);
+            text-shadow: var(--shadow-gold);
+            z-index: 10;
+            display: none;
+        }
+
+        .lucky-players {
+            position: absolute;
+            bottom: 10px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            z-index: 10;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .lucky-player-bet {
+            background: rgba(157, 78, 221, 0.25);
+            padding: 4px 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(157, 78, 221, 0.4);
+        }
+
+        .lucky-player-bet.cashed {
+            background: rgba(0, 255, 136, 0.15);
+            border-color: rgba(0, 255, 136, 0.4);
+            color: var(--success);
+        }
+
         /* Slots */
         .slots-row {
             display: flex;
@@ -1131,14 +1170,16 @@
                 </button>
                 <div>
                     <div class="game-title">Lucky Jet</div>
-                    <div class="game-subtitle">Лови момент до взрыва</div>
+                    <div class="game-subtitle">Общий рейс для всех игроков</div>
                 </div>
             </div>
 
             <div class="crash-canvas" id="luckyCanvasContainer">
                 <canvas id="luckyCanvas" class="lucky-canvas"></canvas>
+                <div class="crash-countdown" id="luckyCountdown">Ожидание ставок...</div>
                 <div class="crash-multiplier" id="crashMultiplier">1.00x</div>
                 <div class="crash-status" id="crashStatus"></div>
+                <div class="lucky-players" id="luckyPlayers"></div>
             </div>
 
             <div class="game-card">
@@ -1153,11 +1194,11 @@
                     <div class="chip chip-5000" data-value="5000" data-target="lucky">5K</div>
                 </div>
 
-                <button class="btn btn-cyan" id="luckyPlayBtn" style="margin-bottom: 10px;">Запустить реактор</button>
+                <button class="btn btn-cyan" id="luckyPlayBtn" style="margin-bottom: 10px;">Поставить</button>
                 <button class="btn btn-outline" onclick="goDashboard()">В кабинет</button>
 
                 <p style="color: var(--text-muted); font-size: 13px; margin-top: 14px;">
-                    Демо-режим: коэффициент случайный. Нажмите «Забрать» до взрыва.
+                    Раунд общий для всех игроков. Сделай ставку до старта, затем забери до краша.
                 </p>
 
                 <div class="history-list" id="luckyHistory"></div>
@@ -1697,11 +1738,13 @@
             });
         }
 
-        // Lucky Jet — Canvas версия
+        // Lucky Jet — WebSocket Multiplayer Crash Game
         const luckyCanvas = document.getElementById('luckyCanvas');
         const luckyCtx = luckyCanvas.getContext('2d');
         const crashStatusEl = document.getElementById('crashStatus');
         const crashMultiplierEl = document.getElementById('crashMultiplier');
+        const luckyCountdownEl = document.getElementById('luckyCountdown');
+        const luckyPlayersEl = document.getElementById('luckyPlayers');
 
         function resizeLuckyCanvas() {
             const rect = luckyCanvas.getBoundingClientRect();
@@ -1711,7 +1754,7 @@
         resizeLuckyCanvas();
         window.addEventListener('resize', resizeLuckyCanvas);
 
-        // Звёзды и пыль для фона
+        // Звёзды для фона
         const stars = [];
         for (let i = 0; i < 80; i++) {
             stars.push({
@@ -1723,46 +1766,347 @@
             });
         }
 
-        let luckyRunning = false;
-        let luckyMultiplier = 1.0;
-        let luckyAnimId = null;
-        let luckyRoundId = null;
-        let luckyCrashMultiplier = 1.0;
-        let luckyBet = 0;
-        let luckyStartTime = 0;
-        let luckyCrashed = false;
-        let luckyRocket = {
-            x: 0.12, // относительные координаты 0..1
-            y: 0.75,
-            phase: 0,
-            hover: 0
+        // Состояние игры
+        let luckyState = {
+            connected: false,
+            roundId: null,
+            state: 'betting',         // betting | flying | crashed | finished
+            multiplier: 1.0,
+            crashMultiplier: null,
+            countdown: 0,
+            myBet: null,              // { amount, cashedOut, cashoutMultiplier, winAmount }
+            players: [],
+            animId: null,
+            crashedAt: 0,
+            rocket: { x: 0.12, y: 0.75, phase: 0, hover: 0 },
+            bgOffsetX: 0,
+            bgOffsetY: 0,
+            lastFrameTime: 0,
+            introProgress: 0,         // 0..1 взлёт в центр
+            crashFlyProgress: 0,      // 0..1 улет за экран
         };
-        let luckyBgOffsetX = 0;
-        let luckyBgOffsetY = 0;
+
+        // WebSocket соединение
+        let luckyWs = null;
+        let luckyWsReconnectTimer = null;
+
+        function getLuckyWsUrl() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = state.baseApiUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+            const params = new URLSearchParams();
+            if (state.telegramInitData) params.set('init_data', state.telegramInitData);
+            else if (state.telegramId) {
+                params.set('user_id', String(state.telegramId));
+                params.set('first_name', state.firstName || 'Игрок');
+            }
+            return `${protocol}//${host}/ws/lucky?${params.toString()}`;
+        }
+
+        function connectLuckyWs() {
+            if (luckyWs && (luckyWs.readyState === WebSocket.CONNECTING || luckyWs.readyState === WebSocket.OPEN)) return;
+
+            try {
+                luckyWs = new WebSocket(getLuckyWsUrl());
+
+                luckyWs.onopen = () => {
+                    luckyState.connected = true;
+                    console.log('[Lucky WS] connected');
+                };
+
+                luckyWs.onmessage = (event) => {
+                    const msg = JSON.parse(event.data);
+                    handleLuckyMessage(msg);
+                };
+
+                luckyWs.onclose = () => {
+                    luckyState.connected = false;
+                    console.log('[Lucky WS] disconnected');
+                    if (luckyWsReconnectTimer) clearTimeout(luckyWsReconnectTimer);
+                    luckyWsReconnectTimer = setTimeout(connectLuckyWs, 2000);
+                };
+
+                luckyWs.onerror = (err) => {
+                    console.error('[Lucky WS] error', err);
+                };
+            } catch (e) {
+                console.error('[Lucky WS] connect error', e);
+            }
+        }
+
+        function handleLuckyMessage(msg) {
+            switch (msg.type) {
+                case 'state':
+                    syncLuckyState(msg.round);
+                    break;
+
+                case 'round_start':
+                    luckyState.roundId = msg.round_id;
+                    luckyState.state = 'betting';
+                    luckyState.multiplier = 1.0;
+                    luckyState.crashMultiplier = null;
+                    luckyState.myBet = null;
+                    luckyState.players = [];
+                    luckyState.introProgress = 0;
+                    luckyState.crashFlyProgress = 0;
+                    luckyState.countdown = msg.countdown_seconds || 7;
+                    updateLuckyUI();
+                    break;
+
+                case 'flight_start':
+                    luckyState.state = 'flying';
+                    luckyState.crashMultiplier = msg.crash_multiplier;
+                    luckyState.lastFrameTime = performance.now();
+                    startLuckyAnimation();
+                    updateLuckyUI();
+                    break;
+
+                case 'tick':
+                    if (luckyState.state === 'flying') {
+                        luckyState.multiplier = msg.multiplier;
+                    }
+                    break;
+
+                case 'bet_placed':
+                    if (!luckyState.players.find(p => p.telegram_id === msg.telegram_id)) {
+                        luckyState.players.push({
+                            telegram_id: msg.telegram_id,
+                            first_name: msg.first_name,
+                            amount: msg.amount,
+                            cashed_out: false,
+                            cashout_multiplier: null,
+                        });
+                    }
+                    if (msg.telegram_id === state.telegramId) {
+                        luckyState.myBet = {
+                            amount: msg.amount,
+                            cashedOut: false,
+                            cashoutMultiplier: null,
+                            winAmount: 0,
+                        };
+                    }
+                    updateLuckyUI();
+                    break;
+
+                case 'cashout':
+                    const player = luckyState.players.find(p => p.telegram_id === msg.telegram_id);
+                    if (player) {
+                        player.cashed_out = true;
+                        player.cashout_multiplier = msg.multiplier;
+                        player.win_amount = msg.win_amount;
+                    }
+                    if (msg.telegram_id === state.telegramId && luckyState.myBet) {
+                        luckyState.myBet.cashedOut = true;
+                        luckyState.myBet.cashoutMultiplier = msg.multiplier;
+                        luckyState.myBet.winAmount = msg.win_amount;
+                        state.balance = msg.balance || state.balance;
+                        renderBalance();
+                        showToast(`Забрано ${formatMoney(msg.win_amount)} TSC при x${msg.multiplier}`);
+                        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                    }
+                    updateLuckyUI();
+                    loadHistory('lucky_jet', luckyHistoryEl);
+                    break;
+
+                case 'crash':
+                    luckyState.state = 'crashed';
+                    luckyState.crashMultiplier = msg.crash_multiplier;
+                    luckyState.crashedAt = performance.now();
+                    crashMultiplierEl.textContent = 'УЛЕТЕЛА ' + msg.crash_multiplier.toFixed(2) + 'x';
+                    crashStatusEl.textContent = 'Улетела!';
+                    crashStatusEl.classList.add('show');
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+                    updateLuckyUI();
+                    loadHistory('lucky_jet', luckyHistoryEl);
+                    break;
+
+                case 'balance_update':
+                    state.balance = msg.balance;
+                    renderBalance();
+                    break;
+
+                case 'error':
+                    showToast('Ошибка: ' + msg.message);
+                    break;
+            }
+        }
+
+        function syncLuckyState(round) {
+            luckyState.roundId = round.round_id;
+            luckyState.state = round.state;
+            luckyState.multiplier = round.current_multiplier;
+            luckyState.crashMultiplier = round.crash_multiplier;
+            if (round.bets) {
+                luckyState.players = round.bets.map(b => ({
+                    telegram_id: b.telegram_id,
+                    first_name: b.first_name,
+                    amount: b.amount,
+                    cashed_out: b.cashed_out,
+                    cashout_multiplier: b.cashout_multiplier,
+                    win_amount: b.win_amount,
+                }));
+                const my = luckyState.players.find(p => p.telegram_id === state.telegramId);
+                if (my) {
+                    luckyState.myBet = {
+                        amount: my.amount,
+                        cashedOut: my.cashed_out,
+                        cashoutMultiplier: my.cashout_multiplier,
+                        winAmount: my.win_amount,
+                    };
+                }
+            }
+            updateLuckyUI();
+            if (round.state === 'flying') {
+                startLuckyAnimation();
+            }
+        }
+
+        function updateLuckyUI() {
+            // Кнопка
+            if (luckyState.state === 'betting') {
+                const canBet = !luckyState.myBet;
+                luckyPlayBtn.disabled = !canBet || state.balance < state.luckyChip;
+                luckyPlayBtn.textContent = canBet ? 'Поставить' : 'Ставка принята';
+                luckyPlayBtn.className = canBet ? 'btn btn-cyan' : 'btn btn-outline';
+            } else if (luckyState.state === 'flying') {
+                if (luckyState.myBet && !luckyState.myBet.cashedOut) {
+                    luckyPlayBtn.disabled = false;
+                    luckyPlayBtn.textContent = `Забрать ${(luckyState.myBet.amount * luckyState.multiplier).toFixed(0)} TSC`;
+                    luckyPlayBtn.className = 'btn btn-primary';
+                } else {
+                    luckyPlayBtn.disabled = true;
+                    luckyPlayBtn.textContent = luckyState.myBet ? 'Забрано' : 'Нет ставки';
+                    luckyPlayBtn.className = 'btn btn-outline';
+                }
+            } else {
+                luckyPlayBtn.disabled = false;
+                luckyPlayBtn.textContent = 'Поставить';
+                luckyPlayBtn.className = 'btn btn-cyan';
+            }
+
+            // Счётчик
+            if (luckyState.state === 'betting') {
+                luckyCountdownEl.style.display = 'block';
+                luckyCountdownEl.textContent = 'Приём ставок: ' + luckyState.countdown + 'с';
+                crashMultiplierEl.style.display = 'none';
+            } else {
+                luckyCountdownEl.style.display = 'none';
+                crashMultiplierEl.style.display = 'block';
+            }
+
+            if (luckyState.state === 'flying') {
+                crashMultiplierEl.textContent = luckyState.multiplier.toFixed(2) + 'x';
+                crashStatusEl.classList.remove('show');
+            }
+
+            // Игроки
+            renderLuckyPlayers();
+        }
+
+        function renderLuckyPlayers() {
+            luckyPlayersEl.innerHTML = '';
+            luckyState.players.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'lucky-player-bet' + (p.cashed_out ? ' cashed' : '');
+                const name = p.first_name || 'Игрок';
+                if (p.cashed_out) {
+                    div.textContent = `${name}: x${p.cashout_multiplier.toFixed(2)} +${formatMoney(p.win_amount)}`;
+                } else {
+                    div.textContent = `${name}: ${formatMoney(p.amount)} TSC`;
+                }
+                luckyPlayersEl.appendChild(div);
+            });
+        }
+
+        // Анимация Canvas
+        function startLuckyAnimation() {
+            if (luckyState.animId) cancelAnimationFrame(luckyState.animId);
+            luckyState.lastFrameTime = performance.now();
+            luckyState.animId = requestAnimationFrame(animateLuckyFrame);
+        }
+
+        function animateLuckyFrame(timestamp) {
+            const dt = timestamp - luckyState.lastFrameTime;
+            luckyState.lastFrameTime = timestamp;
+
+            if (luckyState.state === 'flying') {
+                // Взлёт в центр (2.5 секунды)
+                if (luckyState.introProgress < 1) {
+                    luckyState.introProgress += dt / 2500;
+                    if (luckyState.introProgress > 1) luckyState.introProgress = 1;
+                }
+
+                // Покачивание
+                luckyState.rocket.phase += dt * 0.003;
+                luckyState.rocket.hover += dt * 0.004;
+
+                // Фон
+                drawLuckyBackground(luckyState.multiplier);
+
+                // Позиция ракеты
+                const w = luckyCanvas.width;
+                const h = luckyCanvas.height;
+                const t = easeOutCubic(luckyState.introProgress);
+                const rx = w * (0.12 + t * 0.60 + Math.sin(luckyState.rocket.phase) * 0.03);
+                const ry = h * (0.75 - t * 0.40 + Math.cos(luckyState.rocket.hover) * 0.04);
+                const angle = -0.3 - t * 0.25 + Math.sin(luckyState.rocket.phase) * 0.06;
+                const scale = 1 + Math.max(0, (luckyState.multiplier - 1) * 0.015);
+
+                drawRocket(rx, ry, angle, scale);
+
+                luckyState.animId = requestAnimationFrame(animateLuckyFrame);
+
+            } else if (luckyState.state === 'crashed') {
+                // Улет за пределы экрана
+                const elapsed = timestamp - luckyState.crashedAt;
+                luckyState.crashFlyProgress = Math.min(1, elapsed / 300);
+                const t = easeInQuad(luckyState.crashFlyProgress);
+
+                drawLuckyBackground(luckyState.crashMultiplier || luckyState.multiplier);
+
+                const w = luckyCanvas.width;
+                const h = luckyCanvas.height;
+                const rx = w * (0.72 + t * 0.45);
+                const ry = h * (0.35 - t * 0.65);
+                const angle = -0.55 - t * 0.5;
+                const scale = 1 - t * 0.3;
+
+                drawRocket(rx, ry, angle, Math.max(0.1, scale));
+
+                if (luckyState.crashFlyProgress < 1) {
+                    luckyState.animId = requestAnimationFrame(animateLuckyFrame);
+                }
+            } else {
+                // betting / finished — стартовая позиция
+                drawLuckyBackground(1.0);
+                drawRocket(luckyCanvas.width * 0.12, luckyCanvas.height * 0.75, -0.3, 1);
+            }
+
+            updateLuckyUI();
+        }
+
+        function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+        function easeInQuad(t) { return t * t; }
 
         function drawLuckyBackground(multiplier) {
             const w = luckyCanvas.width;
             const h = luckyCanvas.height;
             const ctx = luckyCtx;
 
-            // Очистка
             const grad = ctx.createLinearGradient(0, 0, 0, h);
             grad.addColorStop(0, 'rgba(10,8,20,0.95)');
             grad.addColorStop(1, 'rgba(20,16,38,0.98)');
             ctx.fillStyle = grad;
             ctx.fillRect(0, 0, w, h);
 
-            // Скорость фона растёт с коэффициентом
             const speed = Math.max(0.3, (multiplier - 1) * 0.35 + 0.3);
-            luckyBgOffsetX += speed * 1.2;
-            luckyBgOffsetY += speed * 0.7;
+            luckyState.bgOffsetX += speed * 1.2;
+            luckyState.bgOffsetY += speed * 0.7;
 
-            // Рисуем сетку
             ctx.strokeStyle = 'rgba(157, 78, 221, 0.12)';
             ctx.lineWidth = 1;
             const gridSize = 40;
-            const offX = -(luckyBgOffsetX % gridSize);
-            const offY = -(luckyBgOffsetY % gridSize);
+            const offX = -(luckyState.bgOffsetX % gridSize);
+            const offY = -(luckyState.bgOffsetY % gridSize);
 
             for (let x = offX; x < w; x += gridSize) {
                 ctx.beginPath();
@@ -1777,10 +2121,9 @@
                 ctx.stroke();
             }
 
-            // Рисуем звёзды
             stars.forEach(star => {
-                let sx = (star.x * w - luckyBgOffsetX * star.speed * 0.5) % w;
-                let sy = (star.y * h + luckyBgOffsetY * star.speed * 0.3) % h;
+                let sx = (star.x * w - luckyState.bgOffsetX * star.speed * 0.5) % w;
+                let sy = (star.y * h + luckyState.bgOffsetY * star.speed * 0.3) % h;
                 if (sx < 0) sx += w;
                 if (sy < 0) sy += h;
                 ctx.fillStyle = `rgba(200, 220, 255, ${star.alpha})`;
@@ -1789,7 +2132,6 @@
                 ctx.fill();
             });
 
-            // Горизонтальная линия снизу
             ctx.strokeStyle = 'rgba(0, 245, 255, 0.4)';
             ctx.lineWidth = 2;
             ctx.shadowBlur = 12;
@@ -1808,7 +2150,6 @@
             ctx.rotate(angle);
             ctx.scale(scale, scale);
 
-            // След пламени
             const flameLength = 25 + Math.random() * 10;
             const grad = ctx.createLinearGradient(-20, 0, -20 - flameLength, 0);
             grad.addColorStop(0, 'rgba(0, 245, 255, 0.8)');
@@ -1821,19 +2162,16 @@
             ctx.lineTo(-14, 6);
             ctx.fill();
 
-            // Корпус ракеты
             ctx.fillStyle = '#e0e0ff';
             ctx.beginPath();
             ctx.ellipse(0, 0, 22, 10, 0, 0, Math.PI * 2);
             ctx.fill();
 
-            // Кабина
             ctx.fillStyle = 'rgba(0, 245, 255, 0.9)';
             ctx.beginPath();
             ctx.arc(10, -2, 6, 0, Math.PI * 2);
             ctx.fill();
 
-            // Крылья
             ctx.fillStyle = '#9d4edd';
             ctx.beginPath();
             ctx.moveTo(-8, 6);
@@ -1846,7 +2184,6 @@
             ctx.lineTo(-4, -10);
             ctx.fill();
 
-            // Свечение
             ctx.shadowBlur = 20;
             ctx.shadowColor = 'rgba(0, 245, 255, 0.7)';
             ctx.strokeStyle = 'rgba(0, 245, 255, 0.4)';
@@ -1859,182 +2196,54 @@
             ctx.restore();
         }
 
-        function animateLucky(timestamp) {
-            if (!luckyRunning && !luckyCrashed) {
-                drawLuckyBackground(1.0);
-                // Рисуем ракету в стартовой позиции
-                drawRocket(luckyCanvas.width * 0.12, luckyCanvas.height * 0.75, -0.3, 1);
+        // Кнопка ставки / вывода
+        luckyPlayBtn.addEventListener('click', () => {
+            if (!luckyState.connected) {
+                showToast('Нет соединения с сервером');
                 return;
             }
 
-            if (!luckyStartTime) luckyStartTime = timestamp;
-            const elapsed = (timestamp - luckyStartTime) / 1000; // секунды
-
-            // Рост коэффициента: экспоненциальный, как в Crash-играх
-            const targetMult = luckyCrashed ? luckyCrashMultiplier : Math.min(1.0 + elapsed * 0.25, luckyCrashMultiplier);
-            luckyMultiplier = targetMult;
-
-            // Фаза 1: взлёт по экспоненте (первые ~2 секунды)
-            // Фаза 2: фиксация в правой части + покачивание
-            const w = luckyCanvas.width;
-            const h = luckyCanvas.height;
-
-            let rx, ry, angle;
-            const ascentDuration = 2.2;
-
-            if (luckyCrashed) {
-                // Резкий улет в правый верхний угол
-                const crashProgress = Math.min(1, (timestamp - luckyCrashTime) / 250);
-                rx = w * (0.72 + crashProgress * 0.45);
-                ry = h * (0.42 - crashProgress * 0.6);
-                angle = -0.55 - crashProgress * 0.5;
-                drawLuckyBackground(luckyMultiplier);
-                drawRocket(rx, ry, angle, 1 - crashProgress * 0.3);
-                if (crashProgress < 1) {
-                    luckyAnimId = requestAnimationFrame(animateLucky);
-                }
-                return;
-            }
-
-            if (elapsed < ascentDuration) {
-                const t = elapsed / ascentDuration;
-                // Экспонента: сначала медленно, потом быстро
-                const exp = 1 - Math.exp(-t * 3.5);
-                rx = w * (0.12 + exp * 0.60);
-                ry = h * (0.75 - exp * 0.40);
-                angle = -0.3 - exp * 0.25;
-            } else {
-                // Фиксированная позиция справа + динамическое покачивание
-                const hoverT = elapsed - ascentDuration;
-                luckyRocket.hover += 0.08;
-                luckyRocket.phase += 0.06;
-                rx = w * (0.72 + Math.sin(luckyRocket.phase) * 0.04);
-                ry = h * (0.35 + Math.cos(luckyRocket.hover) * 0.05 + Math.sin(luckyRocket.phase * 1.7) * 0.03);
-                angle = -0.55 + Math.sin(luckyRocket.phase) * 0.08;
-            }
-
-            luckyRocket.x = rx / w;
-            luckyRocket.y = ry / h;
-
-            drawLuckyBackground(luckyMultiplier);
-            drawRocket(rx, ry, angle, 1 + Math.max(0, (luckyMultiplier - 1) * 0.015));
-
-            crashMultiplierEl.textContent = luckyMultiplier.toFixed(2) + 'x';
-
-            if (luckyMultiplier >= luckyCrashMultiplier) {
-                // Взрыв!
-                triggerCrash();
-            } else {
-                luckyAnimId = requestAnimationFrame(animateLucky);
-            }
-        }
-
-        function triggerCrash() {
-            luckyCrashed = true;
-            luckyCrashTime = performance.now();
-            crashMultiplierEl.textContent = 'ВЗРЫВ 💥 ' + luckyCrashMultiplier.toFixed(2) + 'x';
-            crashStatusEl.textContent = 'Улетела!';
-            crashStatusEl.classList.add('show');
-            showToast('Реактор взорвался! Ставка сгорела');
-            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
-            finishLucky(0);
-        }
-
-        function resetLuckyCanvas() {
-            luckyRunning = false;
-            luckyCrashed = false;
-            luckyStartTime = 0;
-            luckyMultiplier = 1.0;
-            luckyRocket = { x: 0.12, y: 0.75, phase: 0, hover: 0 };
-            luckyBgOffsetX = 0;
-            luckyBgOffsetY = 0;
-            crashStatusEl.classList.remove('show');
-            crashStatusEl.textContent = '';
-            crashMultiplierEl.textContent = '1.00x';
-            if (luckyAnimId) cancelAnimationFrame(luckyAnimId);
-            drawLuckyBackground(1.0);
-            drawRocket(luckyCanvas.width * 0.12, luckyCanvas.height * 0.75, -0.3, 1);
-        }
-
-        async function finishLucky(targetMultiplier) {
-            if (!luckyRoundId) return;
-            try {
-                const result = await api('/api/lucky/cashout', {
-                    method: 'POST',
-                    body: JSON.stringify({ round_id: luckyRoundId, target_multiplier: targetMultiplier })
-                });
-                state.balance = result.balance;
-                renderBalance();
-                if (result.is_win) {
-                    crashMultiplierEl.textContent = 'ЗАБРАНО ' + targetMultiplier.toFixed(2) + 'x';
-                    showToast(`Забрано ${formatMoney(result.win_amount)} TSC при x${targetMultiplier.toFixed(2)}`);
-                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-                    // Остановить анимацию на мгновение победы
-                    luckyRunning = false;
-                    if (luckyAnimId) cancelAnimationFrame(luckyAnimId);
-                } else if (!luckyCrashed) {
-                    // Ручной cashout не успел — взрыв
-                    triggerCrash();
+            if (luckyState.state === 'betting') {
+                if (luckyState.myBet) {
+                    showToast('Ставка уже принята');
                     return;
                 }
-            } catch (err) {
-                showToast('Ошибка: ' + err.message);
+                if (state.balance < state.luckyChip) {
+                    showToast('Недостаточно монет');
+                    return;
+                }
+                luckyWs.send(JSON.stringify({
+                    action: 'place_bet',
+                    amount: state.luckyChip,
+                }));
+                luckyPlayBtn.disabled = true;
+                luckyPlayBtn.textContent = 'Ставка...';
+            } else if (luckyState.state === 'flying') {
+                if (!luckyState.myBet || luckyState.myBet.cashedOut) {
+                    showToast('Нет активной ставки');
+                    return;
+                }
+                luckyWs.send(JSON.stringify({ action: 'cashout' }));
+                luckyPlayBtn.disabled = true;
             }
-            luckyRoundId = null;
-            luckyPlayBtn.textContent = 'Запустить реактор';
-            luckyPlayBtn.className = 'btn btn-cyan';
-            loadHistory('lucky_jet', luckyHistoryEl);
-        }
-
-        luckyPlayBtn.addEventListener('click', () => {
-            if (luckyRunning) {
-                // Забрать
-                luckyRunning = false;
-                if (luckyAnimId) cancelAnimationFrame(luckyAnimId);
-                finishLucky(luckyMultiplier);
-                return;
-            }
-
-            if (luckyCrashed || luckyRoundId) {
-                resetLuckyCanvas();
-                return;
-            }
-
-            if (state.balance < state.luckyChip) { showToast('Недостаточно монет'); return; }
-
-            luckyPlayBtn.disabled = true;
-            luckyPlayBtn.textContent = 'Запуск...';
-
-            api('/api/lucky/start', {
-                method: 'POST',
-                body: JSON.stringify({ bet_amount: state.luckyChip })
-            }).then(data => {
-                luckyRoundId = data.round_id;
-                luckyCrashMultiplier = data.crash_multiplier;
-                luckyBet = data.bet_amount;
-                state.balance = data.balance;
-                renderBalance();
-
-                luckyRunning = true;
-                luckyCrashed = false;
-                luckyStartTime = 0;
-                luckyMultiplier = 1.0;
-                luckyPlayBtn.disabled = false;
-                luckyPlayBtn.textContent = 'Забрать 💰';
-                luckyPlayBtn.className = 'btn btn-primary';
-                crashStatusEl.classList.remove('show');
-
-                luckyAnimId = requestAnimationFrame(animateLucky);
-            }).catch(err => {
-                luckyPlayBtn.disabled = false;
-                luckyPlayBtn.textContent = 'Запустить реактор';
-                luckyPlayBtn.className = 'btn btn-cyan';
-                showToast('Ошибка: ' + err.message);
-            });
         });
 
-        // Первичная отрисовка канваса
-        resetLuckyCanvas();
+        // Подключаемся к серверу при открытии экрана
+        document.addEventListener('DOMContentLoaded', () => {
+            resizeLuckyCanvas();
+            drawLuckyBackground(1.0);
+            drawRocket(luckyCanvas.width * 0.12, luckyCanvas.height * 0.75, -0.3, 1);
+        });
+
+        // Открываем WebSocket, когда заходим на экран Lucky Jet
+        const originalShowScreen = showScreen;
+        showScreen = function(name) {
+            originalShowScreen(name);
+            if (name === 'lucky') {
+                connectLuckyWs();
+                loadHistory('lucky_jet', luckyHistoryEl);
+            }
+        };
 
         // Slots — серверная версия
         const slotIcons = ['🍒', '🍋', '🔔', '💎', '7️⃣', '🍀', '👑'];
