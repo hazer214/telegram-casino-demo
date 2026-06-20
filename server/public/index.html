@@ -1785,8 +1785,12 @@
                     x: 0,
                     y: 0,
                     angle: -0.3,
-                    scale: 1
+                    scale: 1,
+                    shakeX: 0,
+                    shakeY: 0
                 };
+
+                this.particles = [];
 
                 this.bgOffsetX = 0;
                 this.bgOffsetY = 0;
@@ -1862,11 +1866,70 @@
                 this.lastFrameTime = timestamp;
 
                 this.updateRocket(dt, timestamp);
+                this.updateParticles(dt);
                 this.drawBackground();
+                this.drawParticles();
                 this.drawRocket();
                 this.drawOverlay();
 
                 this.animId = requestAnimationFrame((t) => this.frame(t));
+            }
+
+            updateParticles(dt) {
+                // Уменьшаем жизнь частиц
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.life -= dt / 1000;
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.radius *= 0.985;
+                    if (p.life <= 0) {
+                        this.particles.splice(i, 1);
+                    }
+                }
+
+                // Генерируем новые частицы только в полёте или на старте
+                if (this.state === 'FLYING' || this.state === 'WAITING') {
+                    const emissionRate = this.state === 'FLYING' ? 3 + Math.min(8, this.multiplier * 0.8) : 1;
+                    for (let i = 0; i < emissionRate; i++) {
+                        this.spawnParticle();
+                    }
+                }
+            }
+
+            spawnParticle() {
+                const colors = [
+                    'rgba(0, 245, 255, ',   // бирюза
+                    'rgba(157, 78, 221, ',  // фиолет
+                    'rgba(255, 0, 128, ',   // розовый
+                    'rgba(255, 100, 50, '    // оранж
+                ];
+                const baseAngle = this.rocket.angle + Math.PI; // назад от ракеты
+                const spread = 0.5 + Math.random() * 0.5;
+                const speed = 1.5 + Math.random() * 3 + (this.state === 'FLYING' ? this.multiplier * 0.3 : 0);
+                const angle = baseAngle + (Math.random() - 0.5) * spread;
+
+                this.particles.push({
+                    x: this.rocket.x - Math.cos(this.rocket.angle) * 18,
+                    y: this.rocket.y - Math.sin(this.rocket.angle) * 18,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    radius: 2 + Math.random() * 4,
+                    life: 0.4 + Math.random() * 0.3,
+                    colorBase: colors[Math.floor(Math.random() * colors.length)],
+                    maxLife: 0.7
+                });
+            }
+
+            drawParticles() {
+                const ctx = this.ctx;
+                for (const p of this.particles) {
+                    const alpha = Math.max(0, p.life / p.maxLife);
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = p.colorBase + alpha + ')';
+                    ctx.fill();
+                }
             }
 
             updateRocket(dt, timestamp) {
@@ -1879,8 +1942,10 @@
 
                     // Прогрев двигателя: слегка подрагивает
                     const shake = Math.sin(timestamp * 0.02) * 1.5;
-                    this.rocket.x = w * 0.12 + shake;
-                    this.rocket.y = h * 0.75 + Math.cos(this.rocket.hover) * 3;
+                    this.rocket.shakeX = (Math.random() - 0.5) * 0.8;
+                    this.rocket.shakeY = (Math.random() - 0.5) * 0.8;
+                    this.rocket.x = w * 0.12 + shake + this.rocket.shakeX;
+                    this.rocket.y = h * 0.75 + Math.cos(this.rocket.hover) * 3 + this.rocket.shakeY;
                     this.rocket.angle = -0.3 + Math.sin(this.rocket.phase) * 0.04;
                     this.rocket.scale = 1;
 
@@ -1897,9 +1962,18 @@
                     const baseX = w * (0.12 + t * 0.60);
                     const baseY = h * (0.75 - t * 0.40);
 
-                    this.rocket.x = baseX + Math.sin(this.rocket.phase) * (w * 0.03);
-                    this.rocket.y = baseY + Math.sin(this.rocket.hover) * 8;
-                    this.rocket.angle = -0.3 - t * 0.25 + Math.sin(this.rocket.phase) * 0.06;
+                    // Динамический угол: чем выше множитель, тем сильнее нос вверх
+                    const baseAngle = -0.3 - t * 0.25;
+                    const multiplierPitch = -Math.min(0.9, Math.max(0, (this.multiplier - 1) * 0.12));
+
+                    // Тряска от скорости
+                    const shakeIntensity = 0.5 + Math.min(1.5, (this.multiplier - 1) * 0.15);
+                    this.rocket.shakeX = (Math.random() - 0.5) * shakeIntensity;
+                    this.rocket.shakeY = (Math.random() - 0.5) * shakeIntensity;
+
+                    this.rocket.x = baseX + Math.sin(this.rocket.phase) * (w * 0.03) + this.rocket.shakeX;
+                    this.rocket.y = baseY + Math.sin(this.rocket.hover) * 8 + this.rocket.shakeY;
+                    this.rocket.angle = baseAngle + multiplierPitch + Math.sin(this.rocket.phase) * 0.06;
                     this.rocket.scale = 1 + Math.max(0, (this.multiplier - 1) * 0.015);
 
                 } else if (this.state === 'CRASHED') {
@@ -1907,8 +1981,10 @@
                     this.rocket.crashFlyProgress = Math.min(1, elapsed / 300);
                     const t = this.easeInQuad(this.rocket.crashFlyProgress);
 
-                    this.rocket.x = w * (0.72 + t * 0.45);
-                    this.rocket.y = h * (0.35 - t * 0.65);
+                    this.rocket.shakeX = (Math.random() - 0.5) * 3;
+                    this.rocket.shakeY = (Math.random() - 0.5) * 3;
+                    this.rocket.x = w * (0.72 + t * 0.45) + this.rocket.shakeX;
+                    this.rocket.y = h * (0.35 - t * 0.65) + this.rocket.shakeY;
                     this.rocket.angle = -0.55 - t * 0.5;
                     this.rocket.scale = Math.max(0.1, 1 - t * 0.3);
                 }
@@ -1980,62 +2056,63 @@
                 ctx.rotate(this.rocket.angle);
                 ctx.scale(this.rocket.scale, this.rocket.scale);
 
-                const flameLength = 25 + Math.random() * 15;
+                // Glow вокруг ракеты
+                ctx.shadowBlur = 18;
+                ctx.shadowColor = 'rgba(0, 245, 255, 0.5)';
+
+                // Мощный реактивный хвост (градиент)
+                const flameLength = 35 + Math.random() * 20 + (this.state === 'FLYING' ? Math.min(25, this.multiplier * 2) : 0);
                 const flameGrad = ctx.createLinearGradient(-20, 0, -20 - flameLength, 0);
-                flameGrad.addColorStop(0, 'rgba(0, 245, 255, 0.9)');
-                flameGrad.addColorStop(0.4, 'rgba(157, 78, 221, 0.6)');
-                flameGrad.addColorStop(0.8, 'rgba(255, 100, 50, 0.3)');
-                flameGrad.addColorStop(1, 'rgba(255, 0, 80, 0)');
+                flameGrad.addColorStop(0, 'rgba(0, 245, 255, 0.95)');
+                flameGrad.addColorStop(0.35, 'rgba(157, 78, 221, 0.75)');
+                flameGrad.addColorStop(0.7, 'rgba(255, 0, 128, 0.45)');
+                flameGrad.addColorStop(1, 'rgba(255, 100, 50, 0)');
                 ctx.fillStyle = flameGrad;
                 ctx.beginPath();
-                ctx.moveTo(-14, -6);
+                ctx.moveTo(-14, -7);
                 ctx.lineTo(-14 - flameLength, 0);
-                ctx.lineTo(-14, 6);
+                ctx.lineTo(-14, 7);
                 ctx.fill();
 
-                // Искры в хвосте
-                for (let i = 0; i < 6; i++) {
-                    const sparkX = -14 - Math.random() * flameLength;
-                    const sparkY = (Math.random() - 0.5) * 8;
-                    const sparkSize = 1 + Math.random() * 2;
-                    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,245,255,0.8)' : 'rgba(255,100,50,0.7)';
-                    ctx.beginPath();
-                    ctx.arc(sparkX, sparkY, sparkSize, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-
-                // Тело ракеты
-                ctx.fillStyle = '#e0e0ff';
+                // Тело ракеты (футуристичный корпус)
+                const bodyGrad = ctx.createLinearGradient(-22, 0, 22, 0);
+                bodyGrad.addColorStop(0, 'rgba(200, 200, 255, 0.9)');
+                bodyGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.95)');
+                bodyGrad.addColorStop(1, 'rgba(180, 180, 240, 0.9)');
+                ctx.fillStyle = bodyGrad;
                 ctx.beginPath();
-                ctx.ellipse(0, 0, 22, 10, 0, 0, Math.PI * 2);
+                ctx.ellipse(0, 0, 24, 11, 0, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Кабина
-                ctx.fillStyle = 'rgba(0, 245, 255, 0.9)';
+                // Кабина / иллюминатор с ярким свечением
+                ctx.shadowBlur = 22;
+                ctx.shadowColor = '#00f5ff';
+                ctx.fillStyle = '#00f5ff';
                 ctx.beginPath();
-                ctx.arc(10, -2, 6, 0, Math.PI * 2);
+                ctx.arc(10, -2, 7, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.shadowBlur = 0;
 
-                // Крылья
+                // Крылья (фиолетовые)
                 ctx.fillStyle = '#9d4edd';
                 ctx.beginPath();
                 ctx.moveTo(-8, 6);
-                ctx.lineTo(-18, 18);
-                ctx.lineTo(-4, 10);
+                ctx.lineTo(-20, 20);
+                ctx.lineTo(-4, 11);
                 ctx.fill();
                 ctx.beginPath();
                 ctx.moveTo(-8, -6);
-                ctx.lineTo(-18, -18);
-                ctx.lineTo(-4, -10);
+                ctx.lineTo(-20, -20);
+                ctx.lineTo(-4, -11);
                 ctx.fill();
 
-                // Неоновая аура
-                ctx.shadowBlur = 20;
-                ctx.shadowColor = 'rgba(0, 245, 255, 0.7)';
-                ctx.strokeStyle = 'rgba(0, 245, 255, 0.4)';
+                // Неоновая аура контура
+                ctx.shadowBlur = 16;
+                ctx.shadowColor = 'rgba(157, 78, 221, 0.8)';
+                ctx.strokeStyle = 'rgba(0, 245, 255, 0.6)';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.ellipse(0, 0, 24, 12, 0, 0, Math.PI * 2);
+                ctx.ellipse(0, 0, 26, 13, 0, 0, Math.PI * 2);
                 ctx.stroke();
                 ctx.shadowBlur = 0;
 
