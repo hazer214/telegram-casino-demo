@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 from fastapi import WebSocket
 from sqlalchemy.orm import Session
 
-from database import (
+from server.database import (
     User,
     GameHistory,
     secure_random_number,
