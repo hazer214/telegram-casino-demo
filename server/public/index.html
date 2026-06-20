@@ -1508,7 +1508,8 @@
         }
 
         function formatMoney(amount) {
-            return amount.toLocaleString('ru-RU');
+            if (amount === null || amount === undefined || isNaN(amount)) return '0';
+            return Number(amount).toLocaleString('ru-RU');
         }
 
         function getColor(number) {
