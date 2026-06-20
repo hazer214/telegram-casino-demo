@@ -823,33 +823,11 @@
         }
 
         .crash-multiplier {
-            position: absolute;
-            top: 14px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 38px;
-            font-weight: 900;
-            color: var(--accent-cyan);
-            text-shadow: var(--shadow-cyan);
-            z-index: 10;
+            display: none !important;
         }
 
         .crash-status {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 26px;
-            font-weight: 900;
-            color: var(--danger);
-            text-shadow: 0 0 20px rgba(255, 0, 80, 0.6);
-            z-index: 20;
-            opacity: 0;
-            transition: opacity 0.2s ease;
-        }
-
-        .crash-status.show {
-            opacity: 1;
+            display: none !important;
         }
 
         .crash-countdown {
@@ -2302,6 +2280,7 @@
 
         function syncLuckyState(round) {
             luckyState.roundId = round.round_id;
+            luckyState.state = round.state;
             luckyState.players = (round.bets || []).map(b => ({
                 telegram_id: b.telegram_id,
                 first_name: b.first_name,
