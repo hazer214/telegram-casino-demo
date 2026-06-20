@@ -14,6 +14,7 @@ from server.database import (
     get_or_create_user,
     init_db,
 )
+from server.database import SessionLocal
 
 # ---------------------------------------------------------------------------
 # Конфигурация игрового цикла
@@ -131,20 +132,21 @@ class LuckyJetManager:
     # -----------------------------------------------------------------------
 
     async def connect(self, websocket):
-        await self.lock.acquire()
-        try:
+        async with self.lock:
             self.clients.append(websocket)
-            await self._send_state(websocket)
-        finally:
-            self.lock.release()
+            round_state = self.round.to_dict(include_bets=True)
+        try:
+            await websocket.send_text(json.dumps({
+                "type": "state",
+                "round": round_state,
+            }))
+        except Exception:
+            pass
 
     async def disconnect(self, websocket):
-        await self.lock.acquire()
-        try:
+        async with self.lock:
             if websocket in self.clients:
                 self.clients.remove(websocket)
-        finally:
-            self.lock.release()
 
     # -----------------------------------------------------------------------
     # Ставки
@@ -269,9 +271,6 @@ class LuckyJetManager:
                 self.round.state = "flying"
                 self.round.started_at = datetime.now(timezone.utc)
 
-                # Всем, кто не поставил, возвращаем деньги (на всякий случай)
-                # На самом деле деньги уже списаны при ставке.
-
             await self._broadcast({
                 "type": "flight_start",
                 "round_id": self.round.id,
@@ -346,18 +345,6 @@ class LuckyJetManager:
     # Рассылка сообщений
     # -----------------------------------------------------------------------
 
-    async def _send_state(self, websocket):
-        """Отправляет текущее состояние новому подключившемуся клиенту."""
-        async with self.lock:
-            payload = {
-                "type": "state",
-                "round": self.round.to_dict(include_bets=True),
-            }
-        try:
-            await websocket.send_text(json.dumps(payload))
-        except Exception:
-            pass
-
     async def _broadcast(self, message: dict):
         """Рассылает сообщение всем подключённым клиентам."""
         text = json.dumps(message)
@@ -377,7 +364,5 @@ class LuckyJetManager:
 # ---------------------------------------------------------------------------
 # Глобальный менеджер (синглтон)
 # ---------------------------------------------------------------------------
-
-from server.database import SessionLocal
 
 lucky_manager = LuckyJetManager()
