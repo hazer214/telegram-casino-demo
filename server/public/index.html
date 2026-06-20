@@ -1309,7 +1309,6 @@
 
         const state = {
             balance: 0,
-            user: null,
             selectedChip: 100,
             luckyChip: 100,
             slotsChip: 100,
@@ -1318,7 +1317,8 @@
             baseApiUrl: window.location.origin,
             history: [],
             balanceLoaded: false,
-            user: {}
+            user: { id: 0, first_name: 'Игрок', username: '', photo_url: '' },
+            telegramInitData: '',
         };
 
         // DOM
@@ -1355,12 +1355,26 @@
                 const initData = tg.initData || '';
                 const initDataUnsafe = tg.initDataUnsafe || {};
                 const initDataLen = initData.length;
-                const user = initDataUnsafe.user;
+                let user = initDataUnsafe.user;
+
+                // Fallback: если initDataUnsafe.user не заполнен, парсим user из initData
+                if (!user && initData) {
+                    try {
+                        const params = new URLSearchParams(initData);
+                        const userJson = params.get('user');
+                        if (userJson) user = JSON.parse(userJson);
+                    } catch (e) {
+                        console.warn('Failed to parse user from initData', e);
+                    }
+                }
 
                 // Fallback: берём user_id и имя из URL query-параметров
                 const urlParams = new URLSearchParams(window.location.search);
                 const fallbackUserId = urlParams.get('user_id');
                 const fallbackFirstName = urlParams.get('first_name');
+
+                // Сохраняем initData для WebSocket и других нужд
+                state.telegramInitData = initData;
 
                 // Максимально подробный debug
                 const debugInfo = {
@@ -1370,6 +1384,7 @@
                     initDataFirst50: initData.slice(0, 50),
                     initDataUnsafeKeys: Object.keys(initDataUnsafe),
                     userFromInitData: initDataUnsafe.user,
+                    parsedUser: user,
                     urlUserId: fallbackUserId,
                     urlFirstName: fallbackFirstName,
                     fullUrl: window.location.href,
@@ -1399,7 +1414,7 @@
                     dashboardName.textContent = 'Игрок';
                     dashboardAvatar.innerHTML = 'ИГ';
                     state.user = { id: 0, first_name: 'Игрок', username: '', photo_url: '' };
-                    return;
+                    return false;
                 }
 
                 updateDebugPanel(`initData: ${initDataLen} chars, user: ${state.user.first_name}, id: ${state.user.id}`);
@@ -1414,13 +1429,28 @@
 
                 dashboardAvatar.innerHTML = avatarHTML;
                 dashboardName.textContent = state.user.first_name;
+                return true;
             } catch (e) {
                 console.error('initTelegramUser error:', e);
                 updateDebugPanel('initTelegramUser error: ' + e.message);
                 dashboardName.textContent = 'Игрок';
                 dashboardAvatar.innerHTML = 'ИГ';
                 state.user = { id: 0, first_name: 'Игрок', username: '', photo_url: '' };
+                return false;
             }
+        }
+
+        function waitForTelegramUser(maxAttempts = 10) {
+            let attempts = 0;
+            const interval = setInterval(() => {
+                attempts++;
+                if (initTelegramUser() || attempts >= maxAttempts) {
+                    clearInterval(interval);
+                    if (state.user.id) {
+                        loadProfile();
+                    }
+                }
+            }, 300);
         }
 
         function getInitials(name) {
@@ -1531,6 +1561,12 @@
 
         // Профиль
         async function loadProfile(retry = 0) {
+            if (!state.user.id) {
+                if (retry < 5) {
+                    setTimeout(() => loadProfile(retry + 1), 300);
+                }
+                return;
+            }
             try {
                 const profile = await api('/api/user/profile');
                 state.balance = profile.balance;
@@ -2295,20 +2331,12 @@
         });
 
         // Старт
-        try {
-            initTelegramUser();
-        } catch (e) {
-            console.error('initTelegramUser fatal:', e);
-        }
-        setTimeout(() => {
-            console.log('Starting loadProfile...');
-            loadProfile();
-        }, 100);
-        setTimeout(() => {
-            console.log('Retry loadProfile...');
-            loadProfile();
-        }, 1500);
-        setInterval(() => loadProfile(), 30000);
+        waitForTelegramUser();
+
+        // Периодическое обновление профиля
+        setInterval(() => {
+            if (state.user.id) loadProfile();
+        }, 30000);
     </script>
 </body>
 </html>
