@@ -31,9 +31,10 @@ from server.database import (
     lucky_jet,
 )
 from server.lucky_jet_ws import lucky_manager
+from server.roulette_ws import roulette_manager
 
 # ---------------------------------------------------------------------------
-# Хранилище активных раундов Lucky Jet (in-memory для демо)
+# Хранилище активных раундов (in-memory для демо)
 # ---------------------------------------------------------------------------
 
 import uuid
@@ -258,14 +259,21 @@ class SlotsSpinRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Инициализируем БД при старте сервера и запускаем игровой цикл Lucky Jet."""
+    """Инициализируем БД при старте сервера и запускаем игровые циклы."""
     init_db()
     await lucky_manager.start_game_loop()
+    await roulette_manager.start_game_loop()
     yield
     if lucky_manager.game_loop_task:
         lucky_manager.game_loop_task.cancel()
         try:
             await lucky_manager.game_loop_task
+        except asyncio.CancelledError:
+            pass
+    if roulette_manager.game_loop_task:
+        roulette_manager.game_loop_task.cancel()
+        try:
+            await roulette_manager.game_loop_task
         except asyncio.CancelledError:
             pass
 
@@ -371,6 +379,49 @@ async def lucky_jet_websocket(websocket: WebSocket, db: Session = Depends(get_db
     except Exception as e:
         print(f"[Lucky WebSocket] error: {e}")
         await lucky_manager.disconnect(websocket)
+
+
+@app.websocket("/ws/roulette")
+async def roulette_websocket(websocket: WebSocket, db: Session = Depends(get_db)):
+    """WebSocket для синхронного multiplayer Live Roulette."""
+    user = await get_user_from_websocket(websocket, db)
+
+    await websocket.accept()
+    await roulette_manager.connect(websocket)
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            action = msg.get("action")
+
+            if action == "place_bet":
+                bet_type = msg.get("bet_type", "")
+                amount = int(msg.get("amount", 0))
+                if bet_type and amount > 0:
+                    try:
+                        await roulette_manager.place_bet(
+                            user.telegram_id,
+                            user.first_name or "Игрок",
+                            bet_type,
+                            amount,
+                            db,
+                        )
+                    except Exception as e:
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "message": str(e),
+                        }))
+
+    except WebSocketDisconnect:
+        await roulette_manager.disconnect(websocket)
+    except Exception as e:
+        print(f"[Roulette WebSocket] error: {e}")
+        await roulette_manager.disconnect(websocket)
 
 
 @app.get("/")
