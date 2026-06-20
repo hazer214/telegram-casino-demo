@@ -2327,8 +2327,6 @@
         }
 
         function updateLuckyUI(stateName, multiplier, countdown, crashMultiplier) {
-            console.log('[Lucky UI] stateName=', stateName, 'luckyState.state=', luckyState.state, 'myBet=', luckyState.myBet, 'balance=', state.balance, 'chip=', state.luckyChip);
-
             // Кнопка
             if (luckyState.state === 'betting') {
                 const canBet = !luckyState.myBet;
@@ -2349,14 +2347,6 @@
                 luckyPlayBtn.disabled = false;
                 luckyPlayBtn.textContent = 'Поставить';
                 luckyPlayBtn.className = 'btn btn-cyan';
-            }
-
-            if (stateName === 'WAITING') {
-                // ничего не делаем, текст на Canvas
-            } else if (stateName === 'FLYING') {
-                // ничего не делаем, текст на Canvas
-            } else if (stateName === 'CRASHED') {
-                // ничего не делаем, текст на Canvas
             }
 
             renderLuckyPlayers();
