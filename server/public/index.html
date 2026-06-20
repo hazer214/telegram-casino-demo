@@ -8,6 +8,8 @@
     <meta http-equiv="Expires" content="0">
     <title>Telegram Casino</title>
     <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
     <style>
         :root {
             --bg-deep: #0a0814;
@@ -1094,6 +1096,8 @@
                 <div class="balance-label">Ваш баланс</div>
                 <div class="balance-value" id="dashboardBalance">0 TSC</div>
             </div>
+
+            <div id="debugPanel" style="background:rgba(255,0,0,0.15);color:#ff88aa;padding:8px 12px;border-radius:8px;font-size:11px;margin:10px 0;text-align:center;">Debug: loading...</div>
 
             <button class="earn-btn" id="earnBtn">
                 <svg viewBox="0 0 24 24"><path d="M12 2l2.4 7.2h7.6l-6 4.8 2.4 7.2-6-4.8-6 4.8 2.4-7.2-6-4.8h7.6z"/></svg>
