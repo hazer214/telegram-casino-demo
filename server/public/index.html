@@ -8,8 +8,6 @@
     <meta http-equiv="Expires" content="0">
     <title>Telegram Casino</title>
     <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
-    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-    <script>eruda.init();</script>
     <style>
         :root {
             --bg-deep: #0a0814;
@@ -1058,11 +1056,6 @@
                 <div class="balance-value" id="dashboardBalance">0 TSC</div>
             </div>
 
-            <div id="debugPanel" style="margin-top: 12px; padding: 10px; background: rgba(255,0,0,0.1); border-radius: 8px; font-size: 11px; color: var(--text-muted); word-break: break-all;">
-                Debug: initData: ...
-            </div>
-            <button class="btn btn-outline" id="forceReloadBtn" style="margin-top: 10px; padding: 10px 16px; font-size: 13px;">🔄 Обновить профиль</button>
-
             <button class="earn-btn" id="earnBtn">
                 <svg viewBox="0 0 24 24"><path d="M12 2l2.4 7.2h7.6l-6 4.8 2.4 7.2-6-4.8-6 4.8 2.4-7.2-6-4.8h7.6z"/></svg>
                 Заработать
@@ -1398,8 +1391,7 @@
         }
 
         function updateDebugPanel(text) {
-            const panel = document.getElementById('debugPanel');
-            if (panel) panel.textContent = 'Debug: ' + text;
+            console.log('Debug:', text);
         }
 
         // API
@@ -2108,11 +2100,6 @@
             loadProfile();
         }, 1500);
         setInterval(() => loadProfile(), 30000);
-
-        document.getElementById('forceReloadBtn')?.addEventListener('click', () => {
-            initTelegramUser();
-            loadProfile();
-        });
     </script>
 </body>
 </html>
