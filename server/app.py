@@ -22,8 +22,6 @@ from server.database import (
     get_db,
     get_or_create_user,
     init_db,
-    secure_random_number,
-    calculate_roulette_win,
     now_utc,
     User,
     GameHistory,
@@ -31,7 +29,6 @@ from server.database import (
     lucky_jet,
 )
 from server.lucky_jet_ws import lucky_manager
-from server.roulette_ws import roulette_manager
 
 # ---------------------------------------------------------------------------
 # Хранилище активных раундов (in-memory для демо)
@@ -225,10 +222,9 @@ async def require_user(request: Request, db: Session = Depends(get_db)) -> User:
 # Модели запросов
 # ---------------------------------------------------------------------------
 
-class SpinRequest(BaseModel):
-    """Запрос на вращение рулетки."""
+class PlinkoBetRequest(BaseModel):
+    """Запрос на ставку в Plinko."""
     bet_amount: int = Field(..., ge=1, description="Сумма ставки")
-    bet_type: str = Field(..., description="Тип ставки: red, black, even, odd, number:N")
 
 
 class LuckyRequest(BaseModel):
@@ -262,18 +258,11 @@ async def lifespan(app: FastAPI):
     """Инициализируем БД при старте сервера и запускаем игровые циклы."""
     init_db()
     await lucky_manager.start_game_loop()
-    await roulette_manager.start_game_loop()
     yield
     if lucky_manager.game_loop_task:
         lucky_manager.game_loop_task.cancel()
         try:
             await lucky_manager.game_loop_task
-        except asyncio.CancelledError:
-            pass
-    if roulette_manager.game_loop_task:
-        roulette_manager.game_loop_task.cancel()
-        try:
-            await roulette_manager.game_loop_task
         except asyncio.CancelledError:
             pass
 
@@ -381,49 +370,6 @@ async def lucky_jet_websocket(websocket: WebSocket, db: Session = Depends(get_db
         await lucky_manager.disconnect(websocket)
 
 
-@app.websocket("/ws/roulette")
-async def roulette_websocket(websocket: WebSocket, db: Session = Depends(get_db)):
-    """WebSocket для синхронного multiplayer Live Roulette."""
-    user = await get_user_from_websocket(websocket, db)
-
-    await websocket.accept()
-    await roulette_manager.connect(websocket)
-
-    try:
-        while True:
-            raw = await websocket.receive_text()
-            try:
-                msg = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-
-            action = msg.get("action")
-
-            if action == "place_bet":
-                bet_type = msg.get("bet_type", "")
-                amount = int(msg.get("amount", 0))
-                if bet_type and amount > 0:
-                    try:
-                        await roulette_manager.place_bet(
-                            user.telegram_id,
-                            user.first_name or "Игрок",
-                            bet_type,
-                            amount,
-                            db,
-                        )
-                    except Exception as e:
-                        await websocket.send_text(json.dumps({
-                            "type": "error",
-                            "message": str(e),
-                        }))
-
-    except WebSocketDisconnect:
-        await roulette_manager.disconnect(websocket)
-    except Exception as e:
-        print(f"[Roulette WebSocket] error: {e}")
-        await roulette_manager.disconnect(websocket)
-
-
 @app.get("/")
 async def root():
     """Главная страница — отдаём статический HTML Mini App."""
@@ -476,47 +422,57 @@ async def claim_coins(user: User = Depends(require_user), db: Session = Depends(
     }
 
 
-@app.post("/api/roulette/spin")
-async def spin_roulette(
-    spin: SpinRequest,
+@app.post("/api/plinko/bet")
+async def plinko_bet(
+    req: PlinkoBetRequest,
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    """Обрабатывает ставку в рулетку."""
-    # Проверяем, что ставка не больше баланса
-    if spin.bet_amount > user.balance:
+    """Обрабатывает одну ставку в Plinko (HTTP API, одиночный режим).
+
+    Логика распределения: 9 луз.
+    Центр — маленькие множители, края — большие.
+    """
+    if req.bet_amount > user.balance:
         raise HTTPException(status_code=400, detail="Недостаточно средств")
 
-    if spin.bet_amount <= 0:
+    if req.bet_amount <= 0:
         raise HTTPException(status_code=400, detail="Ставка должна быть больше 0")
 
-    # Разрешаем только известные типы ставок
-    allowed_types = {"red", "black", "even", "odd"}
-    if spin.bet_type not in allowed_types and not spin.bet_type.startswith("number:"):
-        raise HTTPException(status_code=400, detail="Некорректный тип ставки")
+    # Списываем ставку
+    user.balance -= req.bet_amount
 
-    # Списываем ставку с баланса
-    user.balance -= spin.bet_amount
+    # 9 луз с множителями
+    multipliers = [100, 50, 10, 5, 0.5, 5, 10, 50, 100]
+    bucket_count = len(multipliers)
 
-    # Генерируем результат на сервере (никогда не доверяем клиенту!)
-    result_number = secure_random_number()
+    # Веса: центр — тяжелее, края — легче
+    weights = [1, 2, 4, 8, 16, 8, 4, 2, 1]
+    total_weight = sum(weights)
 
-    # Рассчитываем выигрыш
-    win_amount = calculate_roulette_win(spin.bet_type, spin.bet_amount, result_number)
-    is_win = win_amount > 0
+    # Выбираем финальную лузу
+    pick = secrets.randbelow(total_weight)
+    cumulative = 0
+    bucket_index = bucket_count - 1
+    for i, w in enumerate(weights):
+        cumulative += w
+        if pick < cumulative:
+            bucket_index = i
+            break
 
-    # Зачисляем выигрыш
-    if is_win:
-        user.balance += win_amount
+    multiplier = multipliers[bucket_index]
+    win_amount = int(req.bet_amount * multiplier)
 
-    # Сохраняем историю игры
+    user.balance += win_amount
+
     history = GameHistory(
         user_id=user.id,
-        bet_amount=spin.bet_amount,
-        bet_type=spin.bet_type,
-        result_number=result_number,
+        game_type="plinko",
+        bet_amount=req.bet_amount,
+        bet_type=f"bucket_{bucket_index}",
+        result_number=bucket_index,
         win_amount=win_amount,
-        is_win=is_win,
+        is_win=win_amount >= req.bet_amount,
     )
     db.add(history)
     db.commit()
@@ -524,12 +480,12 @@ async def spin_roulette(
 
     return {
         "success": True,
-        "result_number": result_number,
-        "is_win": is_win,
+        "ball_id": secrets.token_hex(8),
+        "bucket_index": bucket_index,
+        "multiplier": multiplier,
         "win_amount": win_amount,
         "balance": user.balance,
-        "bet_type": spin.bet_type,
-        "bet_amount": spin.bet_amount,
+        "bet_amount": req.bet_amount,
     }
 
 
@@ -789,7 +745,7 @@ async def get_history(
     """Возвращает историю ставок пользователя (последние 20 записей).
 
     Если указан game_type — фильтрует по типу игры:
-    roulette, lucky_jet, slots.
+    plinko, lucky_jet, slots.
     """
     query = db.query(GameHistory).filter(GameHistory.user_id == user.id)
     if game_type:

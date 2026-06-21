@@ -55,10 +55,10 @@ class GameHistory(Base):  # type: ignore[valid-type, misc]
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    game_type = Column(String, default="roulette", nullable=False)
+    game_type = Column(String, nullable=False)
     bet_amount = Column(Integer, nullable=False)
-    bet_type = Column(String, nullable=False)  # например: "red", "black", "even", "odd", "number:7", "lucky:x1.50"
-    result_number = Column(Integer, nullable=True)  # для рулетки
+    bet_type = Column(String, nullable=False)  # например: "bucket_4", "lucky:x1.50", "slots:🍒,🍋,🔔"
+    result_number = Column(Integer, nullable=True)  # номер лузы в Plinko
     crash_multiplier = Column(String, nullable=True)  # для Lucky Jet (например "x1.50")
     win_amount = Column(Integer, nullable=False)  # 0 если проигрыш
     is_win = Column(Boolean, nullable=False)
@@ -127,59 +127,6 @@ def get_or_create_user(db, telegram_id: int, username: str | None, first_name: s
     return user
 
 
-def secure_random_number() -> int:
-    """Генерирует случайное число для рулетки (0-36) криптографически безопасно."""
-    return secrets.randbelow(37)
-
-
 def now_utc() -> datetime:
     """Текущее время в UTC (offset-aware)."""
     return datetime.now(timezone.utc)
-
-
-# Красные и чёрные числа европейской рулетки
-RED_NUMBERS = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
-BLACK_NUMBERS = {2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35}
-
-
-def is_red(number: int) -> bool:
-    return number in RED_NUMBERS
-
-
-def is_black(number: int) -> bool:
-    return number in BLACK_NUMBERS
-
-
-def is_even(number: int) -> bool:
-    return number != 0 and number % 2 == 0
-
-
-def is_odd(number: int) -> bool:
-    return number != 0 and number % 2 == 1
-
-
-def calculate_roulette_win(bet_type: str, bet_amount: int, result: int) -> int:
-    """Рассчитывает выигрыш по ставке.
-
-    Возвращает сумму выигрыша (0 если проигрыш).
-
-    Правила:
-    - red/black, even/odd — коэффициент 1:1 (выигрыш = ставка + ставка)
-    - конкретное число — коэффициент 35:1 (выигрыш = ставка * 35 + ставка)
-    """
-    if bet_type == "red" and is_red(result):
-        return bet_amount * 2
-    if bet_type == "black" and is_black(result):
-        return bet_amount * 2
-    if bet_type == "even" and is_even(result):
-        return bet_amount * 2
-    if bet_type == "odd" and is_odd(result):
-        return bet_amount * 2
-    if bet_type.startswith("number:"):
-        try:
-            chosen_number = int(bet_type.split(":")[1])
-            if chosen_number == result:
-                return bet_amount * 36
-        except (ValueError, IndexError):
-            pass
-    return 0

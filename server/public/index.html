@@ -506,120 +506,87 @@
             margin-bottom: 18px;
         }
 
-        /* Рулетка Live */
-        .roulette-canvas-wrapper {
+        /* Plinko */
+        .plinko-board {
             position: relative;
-            width: min(300px, 92vw);
-            height: min(300px, 92vw);
-            margin: 0 auto 14px;
+            width: 100%;
+            max-width: 380px;
+            height: min(420px, 52vh);
+            margin: 0 auto 10px;
+            border-radius: var(--radius);
+            background: linear-gradient(180deg, rgba(20,16,38,0.6) 0%, rgba(10,8,20,0.95) 100%);
+            border: 1px solid rgba(157, 78, 221, 0.2);
+            box-shadow:
+                0 0 30px rgba(157, 78, 221, 0.25),
+                inset 0 0 30px rgba(0, 0, 0, 0.4);
+            overflow: hidden;
         }
 
-        .roulette-canvas {
+        .plinko-board canvas {
             width: 100%;
             height: 100%;
-            border-radius: 50%;
             display: block;
-            box-shadow:
-                0 0 40px rgba(157, 78, 221, 0.35),
-                inset 0 0 30px rgba(0, 0, 0, 0.4);
-            background: radial-gradient(circle, rgba(20,16,38,0.6) 0%, rgba(10,8,20,0.95) 100%);
         }
 
-        .roulette-pointer {
-            position: absolute;
-            top: 2px;
-            left: 50%;
-            width: 16px;
-            height: 16px;
-            background: var(--accent-cyan);
-            border-radius: 50%;
-            transform: translateX(-50%);
-            z-index: 5;
-            box-shadow: 0 0 18px var(--accent-cyan), 0 0 6px #fff;
+        .plinko-buckets {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            gap: 4px;
+            max-width: 380px;
+            margin: 0 auto 18px;
+            padding: 0 8px;
         }
 
-        .roulette-status {
+        .bucket {
             text-align: center;
-            font-size: 16px;
-            font-weight: 700;
+            padding: 8px 2px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 800;
             color: #fff;
-            margin-bottom: 6px;
-            text-shadow: 0 0 10px rgba(0,245,255,0.4);
-        }
-
-        .roulette-countdown {
-            text-align: center;
-            font-size: 28px;
-            font-weight: 900;
-            color: var(--accent-gold);
-            margin-bottom: 8px;
-            min-height: 34px;
-            text-shadow: 0 0 12px rgba(255,215,0,0.4);
-        }
-
-        .roulette-result {
-            text-align: center;
-            min-height: 60px;
-            margin-bottom: 4px;
-        }
-
-        .roulette-my-bets {
-            margin-top: 12px;
-            padding-top: 10px;
-            border-top: 1px solid rgba(157, 78, 221, 0.2);
-            font-size: 13px;
-            color: var(--text-muted);
-            min-height: 24px;
-        }
-
-        .bet-btn {
-            padding: 14px;
-            border: none;
-            border-radius: var(--radius-sm);
-            font-weight: 700;
-            font-size: 14px;
-            color: #fff;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            background: rgba(0, 0, 0, 0.25);
+            background: rgba(255,255,255,0.06);
             border: 1px solid rgba(157, 78, 221, 0.25);
         }
 
-        .bet-btn:active { transform: scale(0.97); }
-        .bet-btn.selected {
-            box-shadow: 0 0 0 2px var(--accent-cyan), var(--shadow-cyan);
-            transform: scale(1.02);
-        }
-        .bet-btn.winning {
-            animation: pulse-neon 1s infinite;
-            box-shadow: 0 0 0 3px var(--accent-gold), 0 0 24px var(--accent-gold) !important;
+        .bucket.center {
+            background: rgba(0, 230, 118, 0.12);
+            border-color: rgba(0, 230, 118, 0.4);
+            color: #00e676;
         }
 
-        @keyframes pulse-neon {
-            0%, 100% { transform: scale(1.02); box-shadow: 0 0 0 2px var(--accent-gold), 0 0 16px var(--accent-gold); }
-            50% { transform: scale(1.06); box-shadow: 0 0 0 3px var(--accent-gold), 0 0 30px var(--accent-gold); }
+        .bucket.high {
+            background: rgba(157, 78, 221, 0.18);
+            border-color: rgba(247, 37, 133, 0.4);
+            color: #f72585;
         }
 
-        .bet-red { background: linear-gradient(135deg, #ef5350, #c62828); }
-        .bet-black { background: linear-gradient(135deg, #424242, #212121); }
-        .bet-even { background: linear-gradient(135deg, #42a5f5, #1565c0); }
-        .bet-odd { background: linear-gradient(135deg, #ab47bc, #6a1b9a); }
-
-        .number-bet {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 10px;
-            margin-top: 10px;
+        .plinko-win-popup {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: 10px;
+            background: rgba(0, 0, 0, 0.75);
+            color: var(--accent-gold);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 800;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 10;
         }
 
-        .number-bet input {
-            padding: 12px;
-            border-radius: var(--radius-sm);
-            border: 1px solid rgba(157, 78, 221, 0.3);
-            background: rgba(255,255,255,0.05);
-            color: #fff;
-            font-size: 15px;
-            text-align: center;
+        .plinko-win-popup.show {
+            opacity: 1;
+        }
+
+        .chips-row {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin: 18px 0;
+            flex-wrap: wrap;
         }
 
         .chips-row {
@@ -995,10 +962,10 @@
 
         <div class="menu-title">Заработать</div>
         <div class="menu-list">
-            <div class="menu-item" data-screen="roulette">
-                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
-                <span class="menu-item-text">Рулетка</span>
-                <span class="menu-badge">1:1</span>
+            <div class="menu-item" data-screen="plinko">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M12 2v20M2 12h20" stroke="currentColor" stroke-width="2"/></svg>
+                <span class="menu-item-text">Plinko</span>
+                <span class="menu-badge">x100</span>
             </div>
             <div class="menu-item" data-screen="luckyjet">
                 <svg viewBox="0 0 24 24"><path d="M2.5 19h19v2h-19v-2zm19.57-9.36c-.21-.8-1.04-1.28-1.84-1.06L14.92 10l-6.57-2.26-1.48-.51-1.24.85c-.17.12-.24.34-.17.53.07.19.25.32.45.32h.07l1.4-.31 6.89 2.38 4.56-1.18c.52-.14 1.04.17 1.18.69.13.52-.17 1.05-.69 1.19l-8.03 2.08-4.35-1.5-1.63.36c-.19.04-.36.17-.44.35-.08.18-.06.39.05.55l.67 1.03 6.57 2.26 7.88-2.04c.8-.21 1.28-1.04 1.06-1.84z"/></svg>
@@ -1049,61 +1016,51 @@
             <div class="hint-text">Нажмите, чтобы открыть меню игр</div>
         </section>
 
-        <!-- ===== РУЛЕТКА ===== -->
-        <section class="screen" id="screen-roulette">
+        <!-- ===== PLINKO ===== -->
+        <section class="screen" id="screen-plinko">
             <div class="game-header">
                 <button class="back-btn" onclick="goDashboard()">
                     <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
                 </button>
                 <div>
-                    <div class="game-title">Live Roulette</div>
-                    <div class="game-subtitle">Общий стол для всех игроков</div>
+                    <div class="game-title">Plinko</div>
+                    <div class="game-subtitle">Лавина шариков — падай в x100</div>
                 </div>
             </div>
 
-            <div class="game-card" style="padding: 14px;">
-                <div class="roulette-status" id="rouletteStatus">Подключение...</div>
-                <div class="roulette-countdown" id="rouletteCountdown"></div>
-                <div class="roulette-canvas-wrapper">
-                    <canvas id="rouletteCanvas" class="roulette-canvas"></canvas>
-                    <div class="roulette-pointer"></div>
-                </div>
-                <div class="roulette-result" id="rouletteResult"></div>
+            <div class="plinko-board" id="plinkoBoard">
+                <canvas id="plinkoCanvas"></canvas>
             </div>
 
-            <div class="chips-row" id="rouletteChips">
-                <div class="chip chip-100 active" data-value="100">100</div>
-                <div class="chip chip-500" data-value="500">500</div>
-                <div class="chip chip-1000" data-value="1000">1K</div>
-                <div class="chip chip-5000" data-value="5000">5K</div>
+            <div class="plinko-buckets" id="plinkoBuckets">
+                <div class="bucket">100x</div>
+                <div class="bucket">50x</div>
+                <div class="bucket">10x</div>
+                <div class="bucket">5x</div>
+                <div class="bucket">0.5x</div>
+                <div class="bucket">5x</div>
+                <div class="bucket">10x</div>
+                <div class="bucket">50x</div>
+                <div class="bucket">100x</div>
             </div>
 
             <div class="game-card">
                 <div class="current-stake">
-                    Ставка: <strong id="rouletteCurrentBet">100</strong> TSC
+                    Ставка: <strong id="plinkoCurrentBet">100</strong> TSC
                 </div>
 
-                <div class="bet-grid" id="rouletteBetGrid">
-                    <button class="bet-btn bet-red" data-type="red">Красное 1:1</button>
-                    <button class="bet-btn bet-black" data-type="black">Чёрное 1:1</button>
-                    <button class="bet-btn bet-even" data-type="even">Чётное 1:1</button>
-                    <button class="bet-btn bet-odd" data-type="odd">Нечётное 1:1</button>
+                <div class="chips-row" id="plinkoChips">
+                    <div class="chip chip-100 active" data-value="100">100</div>
+                    <div class="chip chip-500" data-value="500">500</div>
+                    <div class="chip chip-1000" data-value="1000">1K</div>
+                    <div class="chip chip-5000" data-value="5000">5K</div>
                 </div>
 
-                <div class="number-bet">
-                    <input type="number" id="rouletteNumberInput" min="0" max="36" placeholder="Число 0-36">
-                    <button class="btn btn-cyan" id="rouletteBtnNumber" data-type="number">На число 35:1</button>
-                </div>
-
-                <div class="roulette-my-bets" id="rouletteMyBets"></div>
-            </div>
-
-            <div class="action-row">
-                <button class="btn btn-outline" id="claimBtn">+5000 TSC</button>
+                <button class="btn btn-cyan" id="plinkoLaunchBtn">Запустить</button>
                 <button class="btn btn-outline" onclick="goDashboard()">В кабинет</button>
-            </div>
 
-            <div class="history-list" id="rouletteHistory"></div>
+                <div class="history-list" id="plinkoHistory"></div>
+            </div>
         </section>
 
         <!-- ===== LUCKY JET ===== -->
@@ -1228,8 +1185,8 @@
 
                 <div class="bonus-card">
                     <h3>🎯 Первый выигрыш</h3>
-                    <p>Сделай любую ставку в рулетке и получи 2000 TSC.</p>
-                    <button class="btn btn-outline" onclick="navigateTo('roulette')">Играть</button>
+                    <p>Сделай любую ставку в Plinko и получи 2000 TSC.</p>
+                    <button class="btn btn-outline" onclick="navigateTo('plinko')">Играть</button>
                 </div>
             </div>
         </section>
@@ -1253,11 +1210,8 @@
 
         const state = {
             balance: 0,
-            selectedChip: 100,
             luckyChip: 100,
             slotsChip: 100,
-            selectedBetType: null,
-            spinning: false,
             baseApiUrl: window.location.origin,
             history: [],
             balanceLoaded: false,
@@ -1269,30 +1223,23 @@
         const dashboardAvatar = document.getElementById('dashboardAvatar');
         const dashboardName = document.getElementById('dashboardName');
         const dashboardBalance = document.getElementById('dashboardBalance');
-        const currentBetEl = document.getElementById('currentBet');
         const luckyBetEl = document.getElementById('luckyBet');
         const slotsBetEl = document.getElementById('slotsBet');
-        const wheelEl = document.getElementById('wheel');
-        const resultDisplayEl = document.getElementById('resultDisplay');
-        const spinBtn = document.getElementById('spinBtn');
-        const claimBtn = document.getElementById('claimBtn');
         const bonusClaimBtn = document.getElementById('bonusClaimBtn');
         const toastEl = document.getElementById('toast');
         const winOverlay = document.getElementById('winOverlay');
         const winAmountEl = document.getElementById('winAmount');
-        const rouletteHistoryEl = document.getElementById('rouletteHistory');
+        const plinkoHistoryEl = document.getElementById('plinkoHistory');
         const luckyHistoryEl = document.getElementById('luckyHistory');
         const slotsHistoryEl = document.getElementById('slotsHistory');
-        const numberInput = document.getElementById('numberInput');
+
         const sidebar = document.getElementById('sidebar');
         const menuOverlay = document.getElementById('menuOverlay');
         const hamburger = document.getElementById('hamburger');
         const closeSidebar = document.getElementById('closeSidebar');
         const earnBtn = document.getElementById('earnBtn');
 
-        const SECTOR_ANGLE = 360 / 37;
-        const RED_NUMBERS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
-
+                
         // Telegram user
         function initTelegramUser() {
             try {
@@ -1452,11 +1399,6 @@
             return Number(amount).toLocaleString('ru-RU');
         }
 
-        function getColor(number) {
-            if (number === 0) return 'green';
-            return RED_NUMBERS.has(number) ? 'red' : 'black';
-        }
-
         // Меню
         function openMenu() {
             sidebar.classList.add('open');
@@ -1482,7 +1424,7 @@
             if (nav) nav.classList.add('active');
             closeMenu();
             window.scrollTo(0, 0);
-            if (screenId === 'roulette') loadHistory('roulette', rouletteHistoryEl);
+                        if (screenId === 'plinko') loadHistory('plinko', plinkoHistoryEl);
             if (screenId === 'luckyjet') loadHistory('lucky_jet', luckyHistoryEl);
             if (screenId === 'slots') loadHistory('slots', slotsHistoryEl);
         }
@@ -1517,8 +1459,8 @@
                 state.balance = profile.balance;
                 state.balanceLoaded = true;
                 renderBalance();
-                if (document.getElementById('screen-roulette').classList.contains('active')) {
-                    loadHistory('roulette', rouletteHistoryEl);
+                if (document.getElementById('screen-plinko').classList.contains('active')) {
+                    loadHistory('plinko', plinkoHistoryEl);
                 }
                 updateDebugPanel(`profile loaded: ${state.user.first_name}, balance: ${profile.balance}`);
             } catch (err) {
@@ -1536,17 +1478,6 @@
         function renderBalance() {
             dashboardBalance.textContent = formatMoney(state.balance) + ' TSC';
         }
-
-        // Фишки рулетки
-        document.querySelectorAll('.chip:not([data-target])').forEach(chip => {
-            chip.addEventListener('click', () => {
-                document.querySelectorAll('.chip:not([data-target])').forEach(c => c.classList.remove('active'));
-                chip.classList.add('active');
-                state.selectedChip = parseInt(chip.dataset.value, 10);
-                currentBetEl.textContent = formatMoney(state.selectedChip);
-                updateSpinButton();
-            });
-        });
 
         // Фишки Lucky Jet
         document.querySelectorAll('.chip[data-target="lucky"]').forEach(chip => {
@@ -1568,510 +1499,292 @@
             });
         });
 
-        // Live Roulette — WebSocket Multiplayer
-        const rouletteCanvasEl = document.getElementById('rouletteCanvas');
-        const rouletteStatusEl = document.getElementById('rouletteStatus');
-        const rouletteCountdownEl = document.getElementById('rouletteCountdown');
-        const rouletteResultEl = document.getElementById('rouletteResult');
-        const rouletteCurrentBetEl = document.getElementById('rouletteCurrentBet');
-        const rouletteNumberInput = document.getElementById('rouletteNumberInput');
-        const rouletteMyBetsEl = document.getElementById('rouletteMyBets');
-        const rouletteBetGrid = document.getElementById('rouletteBetGrid');
+        // Plinko — одиночная игра с лавиной шариков через HTTP API
+        const plinkoCanvas = document.getElementById('plinkoCanvas');
+        const plinkoCurrentBetEl = document.getElementById('plinkoCurrentBet');
+        const plinkoLaunchBtn = document.getElementById('plinkoLaunchBtn');
+        const plinkoChips = document.querySelectorAll('#plinkoChips .chip');
+        const plinkoHistoryEl = document.getElementById('plinkoHistory');
+        const plinkoBucketsEl = document.getElementById('plinkoBuckets');
 
-        let rouletteState = {
-            roundId: null,
-            state: 'betting',
-            countdown: 15,
-            myBets: [], // [{bet_type, amount}]
-            winningNumber: null,
-            history: [],
-            players: [],
-            chip: 100,
-            selectedBetType: null,
-            spinning: false,
+        let plinkoChip = 100;
+        const PLINKO_BUCKETS = 9;
+        const PLINKO_MULTIPLIERS = [100, 50, 10, 5, 0.5, 5, 10, 50, 100];
+        const PLINKO_ROWS = 12;
+
+        // Настройки физики Canvas
+        const plinkoState = {
+            balls: [],
+            pending: new Map(), // ballId -> { betAmount, startX, path }
+            pegs: [],
+            width: 0,
+            height: 0,
+            bucketWidth: 0,
+            pegRadius: 3.5,
+            ballRadius: 5,
+            rowGap: 0,
+            colGap: 0,
         };
 
-        // Европейский порядок секторов (против часовой стрелки)
-        const ROULETTE_WHEEL_ORDER = [
-            0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36,
-            11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9,
-            22, 18, 29, 7, 28, 12, 35, 3, 26
-        ];
-        const ROULETTE_SECTOR_ANGLE = 2 * Math.PI / 37;
+        function initPlinkoCanvas() {
+            const rect = plinkoCanvas.parentElement.getBoundingClientRect();
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            plinkoCanvas.width = rect.width * dpr;
+            plinkoCanvas.height = rect.height * dpr;
+            plinkoCanvas.style.width = rect.width + 'px';
+            plinkoCanvas.style.height = rect.height + 'px';
 
-        function getRouletteNumberColor(number) {
-            if (number === 0) return 'green';
-            const redNumbers = {1:1,3:1,5:1,7:1,9:1,12:1,14:1,16:1,18:1,19:1,21:1,23:1,25:1,27:1,30:1,32:1,34:1,36:1};
-            return redNumbers[number] ? 'red' : 'black';
-        }
+            const ctx = plinkoCanvas.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-        class RouletteCanvas {
-            constructor(canvas) {
-                this.canvas = canvas;
-                this.ctx = canvas.getContext('2d');
-                this.state = 'betting'; // betting | spinning | result
-                this.wheelAngle = 0;
-                this.ballAngle = 0;
-                this.ballRadiusRatio = 0.78; // относительно радиуса колеса
-                this.ballSpeed = 0;
-                this.targetSector = null;
-                this.spinStartTime = 0;
-                this.spinDuration = 6000;
-                this.lastFrameTime = 0;
-                this.running = false;
+            plinkoState.width = rect.width;
+            plinkoState.height = rect.height;
+            plinkoState.bucketWidth = plinkoState.width / PLINKO_BUCKETS;
 
-                this.rouletteImg = new Image();
-                this.rouletteImg.src = 'roulette_wheel.png';
-                this.rouletteImg.onload = () => {
-                    this.resize();
-                    this.draw();
-                };
+            // Расставляем штырьки треугольником
+            plinkoState.pegs = [];
+            const topOffset = 40;
+            const bottomOffset = 70;
+            const usableHeight = plinkoState.height - topOffset - bottomOffset;
+            plinkoState.rowGap = usableHeight / (PLINKO_ROWS + 1);
 
-                this.resize();
-                window.addEventListener('resize', () => this.resize());
-            }
-
-            resize() {
-                const rect = this.canvas.getBoundingClientRect();
-                const dpr = Math.min(window.devicePixelRatio || 1, 2);
-                this.canvas.width = rect.width * dpr;
-                this.canvas.height = rect.height * dpr;
-                this.width = rect.width;
-                this.height = rect.height;
-                this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-                this.centerX = this.width / 2;
-                this.centerY = this.height / 2;
-                this.radius = Math.min(this.width, this.height) / 2 - 8;
-            }
-
-            startRound() {
-                this.state = 'betting';
-                this.wheelAngle = 0;
-                this.ballAngle = Math.random() * Math.PI * 2;
-                this.ballRadiusRatio = 0.78;
-                this.ballSpeed = 0;
-                this.targetSector = null;
-                if (!this.running) {
-                    this.running = true;
-                    this.lastFrameTime = performance.now();
-                    requestAnimationFrame(t => this.frame(t));
+            for (let row = 0; row < PLINKO_ROWS; row++) {
+                const count = row + 3; // от 3 до 14 штырьков
+                const totalWidth = (count - 1) * (plinkoState.width / (PLINKO_ROWS + 2));
+                const startX = (plinkoState.width - totalWidth) / 2;
+                for (let col = 0; col < count; col++) {
+                    plinkoState.pegs.push({
+                        x: startX + col * (plinkoState.width / (PLINKO_ROWS + 2)),
+                        y: topOffset + row * plinkoState.rowGap,
+                    });
                 }
             }
 
-            startSpin(targetSector, duration) {
-                this.state = 'spinning';
-                this.targetSector = targetSector;
-                this.spinDuration = duration * 1000;
-                this.spinStartTime = performance.now();
-                // Начальная скорость шарика: вращается против колеса
-                this.ballSpeed = -0.35; // радиан/кадр
-                this.ballRadiusRatio = 0.78;
-                this.wheelAngle = 0;
-                this.wheelSpeed = 0.25; // колесо крутится по часовой
+            requestAnimationFrame(drawPlinkoFrame);
+        }
+
+        function drawPlinkoFrame() {
+            const ctx = plinkoCanvas.getContext('2d');
+            const { width, height } = plinkoState;
+
+            ctx.clearRect(0, 0, width, height);
+
+            // Рисуем штырьки
+            ctx.fillStyle = 'rgba(157, 78, 221, 0.85)';
+            ctx.shadowColor = 'rgba(157, 78, 221, 0.6)';
+            ctx.shadowBlur = 6;
+            for (const peg of plinkoState.pegs) {
+                ctx.beginPath();
+                ctx.arc(peg.x, peg.y, plinkoState.pegRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.shadowBlur = 0;
+
+            // Рисуем шарики
+            for (const ball of plinkoState.balls) {
+                ctx.beginPath();
+                ctx.arc(ball.x, ball.y, plinkoState.ballRadius, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.shadowColor = 'rgba(255,255,255,0.7)';
+                ctx.shadowBlur = 8;
+                ctx.fill();
+                ctx.shadowBlur = 0;
             }
 
-            frame(timestamp) {
-                if (!this.running) return;
-                const dt = timestamp - this.lastFrameTime;
-                this.lastFrameTime = timestamp;
+            // Обновляем физику
+            updatePlinkoBalls();
 
-                if (this.state === 'spinning') {
-                    const elapsed = timestamp - this.spinStartTime;
-                    const progress = Math.min(1, elapsed / this.spinDuration);
+            requestAnimationFrame(drawPlinkoFrame);
+        }
 
-                    // Колесо: замедляется к финалу
-                    const wheelDecel = this.easeOutCubic(progress);
-                    this.wheelAngle += this.wheelSpeed * (1 - wheelDecel * 0.92);
+        function updatePlinkoBalls() {
+            const g = 0.45;
+            const bounce = 0.65;
+            const floorY = plinkoState.height - 55;
 
-                    // Шарик: противоположное направление, затем падает на сектор
-                    const ballDecel = this.easeOutCubic(progress);
-                    this.ballAngle += this.ballSpeed * (1 - ballDecel * 0.96);
+            for (let i = plinkoState.balls.length - 1; i >= 0; i--) {
+                const ball = plinkoState.balls[i];
 
-                    // Радиус шарика уменьшается — падает внутрь
-                    const inner = 0.22; // финальный радиус от центра
-                    const start = 0.78;
-                    // Более резкое падение во второй половине
-                    const radiusProgress = progress < 0.5
-                        ? start - (start - inner) * (progress * 0.3)
-                        : start - (start - inner) * ((progress - 0.5) * 1.8 + 0.15);
-                    this.ballRadiusRatio = Math.max(inner, radiusProgress);
+                ball.vy += g;
+                ball.x += ball.vx;
+                ball.y += ball.vy;
 
-                    // В финале фиксируем шарик точно на секторе
-                    if (progress >= 0.96) {
-                        this.ballRadiusRatio = inner;
-                        const targetAngle = -this.targetSector * ROULETTE_SECTOR_ANGLE - ROULETTE_SECTOR_ANGLE / 2 - Math.PI / 2;
-                        // Сглаживаем к целевому углу
-                        this.ballAngle = this.lerpAngle(this.ballAngle, targetAngle - this.wheelAngle, 0.15);
+                // Отскок от штырьков
+                for (const peg of plinkoState.pegs) {
+                    const dx = ball.x - peg.x;
+                    const dy = ball.y - peg.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const minDist = plinkoState.pegRadius + plinkoState.ballRadius;
+                    if (dist < minDist && dist > 0) {
+                        // Отталкиваем
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        const overlap = minDist - dist;
+                        ball.x += nx * overlap;
+                        ball.y += ny * overlap;
+                        // Отражаем скорость
+                        const dot = ball.vx * nx + ball.vy * ny;
+                        ball.vx -= 2 * dot * nx;
+                        ball.vy -= 2 * dot * ny;
+                        ball.vx *= bounce;
+                        ball.vy *= bounce;
+                        // Добавляем случайный импульс влево/вправо
+                        ball.vx += (Math.random() - 0.5) * 1.2;
                     }
                 }
 
-                this.draw();
-                requestAnimationFrame(t => this.frame(t));
-            }
-
-            lerpAngle(a, b, t) {
-                let diff = (b - a) % (Math.PI * 2);
-                if (diff < -Math.PI) diff += Math.PI * 2;
-                if (diff > Math.PI) diff -= Math.PI * 2;
-                return a + diff * t;
-            }
-
-            easeOutCubic(t) {
-                return 1 - Math.pow(1 - t, 3);
-            }
-
-            draw() {
-                const ctx = this.ctx;
-                const w = this.width;
-                const h = this.height;
-                ctx.clearRect(0, 0, w, h);
-
-                // Фон
-                ctx.fillStyle = '#0a0814';
-                ctx.fillRect(0, 0, w, h);
-
-                ctx.save();
-                ctx.translate(this.centerX, this.centerY);
-
-                // Рисуем колесо (спрайт)
-                if (this.rouletteImg.complete && this.rouletteImg.naturalWidth) {
-                    ctx.save();
-                    ctx.rotate(this.wheelAngle);
-                    const size = this.radius * 2;
-                    ctx.drawImage(this.rouletteImg, -size/2, -size/2, size, size);
-                    ctx.restore();
-                } else {
-                    // Fallback: круг
-                    ctx.beginPath();
-                    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
-                    ctx.fillStyle = '#1a1530';
-                    ctx.fill();
-                    ctx.strokeStyle = '#9d4edd';
-                    ctx.lineWidth = 3;
-                    ctx.stroke();
+                // Стены
+                if (ball.x < plinkoState.ballRadius) {
+                    ball.x = plinkoState.ballRadius;
+                    ball.vx *= -0.6;
+                }
+                if (ball.x > plinkoState.width - plinkoState.ballRadius) {
+                    ball.x = plinkoState.width - plinkoState.ballRadius;
+                    ball.vx *= -0.6;
                 }
 
-                // Шарик
-                const ballR = this.ballRadiusRatio * this.radius;
-                const bx = Math.cos(this.ballAngle) * ballR;
-                const by = Math.sin(this.ballAngle) * ballR;
-
-                // Glow шарика
-                ctx.shadowBlur = 14;
-                ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
-                ctx.beginPath();
-                ctx.arc(bx, by, Math.max(5, this.radius * 0.035), 0, Math.PI * 2);
-                ctx.fillStyle = '#ffffff';
-                ctx.fill();
-                ctx.shadowBlur = 0;
-
-                // Центральный блик
-                ctx.beginPath();
-                ctx.arc(bx - 1, by - 1, Math.max(2, this.radius * 0.012), 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(0,245,255,0.6)';
-                ctx.fill();
-
-                ctx.restore();
-            }
-
-            stop() {
-                this.running = false;
-            }
-        }
-
-        let rouletteCanvasApp = null;
-        function initRouletteCanvas() {
-            if (rouletteCanvasApp) return;
-            rouletteCanvasApp = new RouletteCanvas(rouletteCanvasEl);
-            rouletteCanvasApp.startRound();
-        }
-
-        // WebSocket рулетки
-        let rouletteWs = null;
-        function connectRouletteWs() {
-            if (rouletteWs && (rouletteWs.readyState === WebSocket.CONNECTING || rouletteWs.readyState === WebSocket.OPEN)) return;
-
-            const params = buildQueryParams();
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const url = `${protocol}//${window.location.host}/ws/roulette${params}`;
-
-            rouletteWs = new WebSocket(url);
-            rouletteWs.onopen = () => {
-                rouletteStatusEl.textContent = 'Подключено — ждём раунд';
-            };
-            rouletteWs.onmessage = (event) => {
-                try {
-                    const msg = JSON.parse(event.data);
-                    handleRouletteMessage(msg);
-                } catch (e) { console.error(e); }
-            };
-            rouletteWs.onclose = () => {
-                rouletteStatusEl.textContent = 'Переподключение...';
-                setTimeout(connectRouletteWs, 1500);
-            };
-            rouletteWs.onerror = () => {
-                rouletteStatusEl.textContent = 'Ошибка соединения';
-            };
-        }
-
-        function handleRouletteMessage(msg) {
-            if (msg.type === 'state') {
-                syncRouletteState(msg.round);
-            } else if (msg.type === 'round_start') {
-                rouletteState.roundId = msg.round_id;
-                rouletteState.state = 'betting';
-                rouletteState.countdown = msg.countdown_seconds || 15;
-                rouletteState.myBets = [];
-                rouletteState.winningNumber = null;
-                renderRouletteBets();
-                renderRouletteStatus();
-                rouletteResultEl.innerHTML = '';
-                clearWinningBetsHighlight();
-                if (rouletteCanvasApp) rouletteCanvasApp.startRound();
-            } else if (msg.type === 'spin_start') {
-                rouletteState.state = 'spinning';
-                rouletteState.winningNumber = msg.winning_number;
-                renderRouletteStatus();
-                if (rouletteCanvasApp) {
-                    rouletteCanvasApp.startSpin(msg.winning_sector, msg.duration_seconds || 6);
+                // Достигли пола
+                if (!ball.settled && ball.y >= floorY) {
+                    settlePlinkoBall(ball, i);
                 }
-            } else if (msg.type === 'result') {
-                rouletteState.state = 'result';
-                rouletteState.winningNumber = msg.winning_number;
-                state.balance = msg.winners?.find(w => w.telegram_id === state.user.id)?.balance || state.balance;
-                renderBalance();
-                renderRouletteResult(msg.winning_number, msg.color, msg.winners || []);
-                renderRouletteHistory(msg.winning_number, msg.color);
-                highlightWinningBets(msg.winning_number, msg.color);
-                loadHistory('roulette', rouletteHistoryEl);
-            } else if (msg.type === 'round_finish') {
-                rouletteState.state = 'betting';
-                rouletteState.myBets = [];
-                renderRouletteBets();
-                clearWinningBetsHighlight();
-            } else if (msg.type === 'bet_placed') {
-                // Ставка другого игрока или своя
-                if (msg.telegram_id === state.user.id) {
-                    state.balance = msg.balance;
-                    renderBalance();
+            }
+        }
+
+        function settlePlinkoBall(ball, index) {
+            ball.settled = true;
+            ball.vx = 0;
+            ball.vy = 0;
+            ball.y = plinkoState.height - 40;
+
+            // Если ответ с сервера ещё не пришёл — плавно пододвигаем к центру целевой лузы
+            if (!ball.serverResult) {
+                return;
+            }
+
+            const bucket = ball.serverResult.bucket_index;
+            const targetX = bucket * plinkoState.bucketWidth + plinkoState.bucketWidth / 2;
+
+            // Плавно двигаем к центру лузы
+            const move = () => {
+                const dx = targetX - ball.x;
+                if (Math.abs(dx) < 1) {
+                    ball.x = targetX;
+                    finishPlinkoBall(ball, index);
+                    return;
                 }
-            } else if (msg.type === 'error') {
-                showToast(msg.message);
-            }
+                ball.x += dx * 0.12;
+                requestAnimationFrame(move);
+            };
+            move();
         }
 
-        function syncRouletteState(round) {
-            rouletteState.roundId = round.round_id;
-            rouletteState.state = round.state;
-            rouletteState.winningNumber = round.winning_number;
-            renderRouletteStatus();
-            if (round.state === 'spinning' && round.winning_sector !== null) {
-                if (rouletteCanvasApp) rouletteCanvasApp.startSpin(round.winning_sector, 6);
-            }
-        }
+        function finishPlinkoBall(ball, index) {
+            if (ball.finished) return;
+            ball.finished = true;
 
-        function renderRouletteStatus() {
-            if (rouletteState.state === 'betting') {
-                rouletteStatusEl.textContent = 'Сделайте ваши ставки';
-                rouletteCountdownEl.textContent = rouletteState.countdown + 'с';
-            } else if (rouletteState.state === 'spinning') {
-                rouletteStatusEl.textContent = 'Ставки закрыты — крутим!';
-                rouletteCountdownEl.textContent = '';
-            } else if (rouletteState.state === 'result') {
-                rouletteStatusEl.textContent = 'Результат';
-                rouletteCountdownEl.textContent = '';
-            }
-        }
+            const result = ball.serverResult;
+            if (!result) return;
 
-        function renderRouletteResult(number, color, winners) {
-            const colorName = color === 'green' ? 'Зелёное' : (color === 'red' ? 'Красное' : 'Чёрное');
-            const myWin = winners.find(w => w.telegram_id === state.user.id);
-            let winText = '';
-            if (myWin) {
-                winText = `\u003cdiv style="color: var(--accent-gold); font-weight: 700; margin-top: 6px;"\u003e+${formatMoney(myWin.win_amount)} TSC\u003c/div\u003e`;
+            const net = result.win_amount - result.bet_amount;
+            if (net > 0) {
+                state.balance += net;
+                animateBalanceChange(net);
+                showWinOverlay('+' + formatMoney(net) + ' TSC');
                 if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+            } else if (net < 0) {
+                if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
             }
-            rouletteResultEl.innerHTML = `
-                \u003cdiv class="result-badge ${color}"\u003e${number}\u003c/div\u003e
-                \u003cdiv class="result-text"\u003e${colorName}\u003c/div\u003e
-                ${winText}
-            `;
+
+            renderBalance();
+            addPlinkoHistory(result);
+
+            // Удаляем через задержку, чтобы не мешать новым шарикам
+            setTimeout(() => {
+                const idx = plinkoState.balls.indexOf(ball);
+                if (idx >= 0) plinkoState.balls.splice(idx, 1);
+            }, 1200);
         }
 
-        let rouletteResultHistory = [];
-        function renderRouletteHistory(number, color) {
-            rouletteResultHistory.unshift({ number, color });
-            if (rouletteResultHistory.length > 10) rouletteResultHistory.pop();
-            // Отрисовываем в resultEl небольшую ленту
-            const html = rouletteResultHistory.map(item =>
-                `\u003cspan style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;font-size:12px;font-weight:800;margin:0 3px;background:${item.color === 'red' ? '#d32f2f' : (item.color === 'black' ? '#212121' : '#388e3c')};color:#fff;"\u003e${item.number}\u003c/span\u003e`
-            ).join('');
-            if (!document.getElementById('rouletteMiniHistory')) {
-                rouletteResultEl.innerHTML += `\u003cdiv id="rouletteMiniHistory" style="margin-top:10px;"\u003e${html}\u003c/div\u003e`;
-            } else {
-                document.getElementById('rouletteMiniHistory').innerHTML = html;
-            }
+        function spawnPlinkoBall(betAmount, serverResult = null) {
+            const startX = plinkoState.width / 2 + (Math.random() - 0.5) * 20;
+            const ball = {
+                x: startX,
+                y: 12,
+                vx: (Math.random() - 0.5) * 0.5,
+                vy: 0,
+                settled: false,
+                finished: false,
+                serverResult: serverResult,
+                betAmount: betAmount,
+            };
+            plinkoState.balls.push(ball);
+            return ball;
         }
 
-        function placeRouletteBet(betType) {
-            if (rouletteState.state !== 'betting') {
-                showToast('Приём ставок закрыт, дождитесь следующего раунда');
+        async function launchPlinko() {
+            const bet = plinkoChip;
+            if (bet > state.balance) {
+                showToast('Недостаточно средств');
                 return;
             }
-            if (state.balance < rouletteState.chip) {
-                showToast('Недостаточно монет');
-                return;
-            }
-            if (!rouletteWs || rouletteWs.readyState !== WebSocket.OPEN) {
-                showToast('Нет соединения с сервером');
-                return;
-            }
-            rouletteWs.send(JSON.stringify({
-                action: 'place_bet',
-                bet_type: betType,
-                amount: rouletteState.chip,
-            }));
-            rouletteState.myBets.push({ bet_type: betType, amount: rouletteState.chip });
-            renderRouletteBets();
-        }
 
-        function renderRouletteBets() {
-            if (!rouletteState.myBets.length) {
-                rouletteMyBetsEl.innerHTML = 'Ваши ставки: нет';
-                return;
-            }
-            const html = rouletteState.myBets.map(b => {
-                let label = b.bet_type;
-                if (label.startsWith('number:')) label = `Число ${label.split(':')[1]}`;
-                return `${label} — ${formatMoney(b.amount)} TSC`;
-            }).join('\u003cbr\u003e');
-            rouletteMyBetsEl.innerHTML = 'Ваши ставки:\u003cbr\u003e' + html;
-        }
+            // Мгновенно списываем с визуального баланса и запускаем шарик
+            state.balance -= bet;
+            renderBalance();
+            const localBall = spawnPlinkoBall(bet, null);
 
-        function clearWinningBetsHighlight() {
-            document.querySelectorAll('#rouletteBetGrid .bet-btn').forEach(b => b.classList.remove('winning'));
-            document.getElementById('rouletteBtnNumber').classList.remove('winning');
-        }
-
-        function highlightWinningBets(number, color) {
-            clearWinningBetsHighlight();
-            // Красное / чёрное / чётное / нечётное / число
-            const winningTypes = [];
-            if (color === 'red') winningTypes.push('red');
-            if (color === 'black') winningTypes.push('black');
-            if (number !== 0 && number % 2 === 0) winningTypes.push('even');
-            if (number !== 0 && number % 2 === 1) winningTypes.push('odd');
-            winningTypes.push(`number:${number}`);
-
-            document.querySelectorAll('#rouletteBetGrid .bet-btn').forEach(btn => {
-                if (winningTypes.includes(btn.dataset.type)) btn.classList.add('winning');
-            });
-
-            // Подсветим кнопку "На число" если число совпало
-            const myNumberBets = rouletteState.myBets.filter(b => b.bet_type === `number:${number}`);
-            if (myNumberBets.length) document.getElementById('rouletteBtnNumber').classList.add('winning');
-        }
-
-        // Фишки рулетки
-        document.querySelectorAll('#rouletteChips .chip').forEach(chip => {
-            chip.addEventListener('click', () => {
-                document.querySelectorAll('#rouletteChips .chip').forEach(c => c.classList.remove('active'));
-                chip.classList.add('active');
-                rouletteState.chip = parseInt(chip.dataset.value, 10);
-                rouletteCurrentBetEl.textContent = formatMoney(rouletteState.chip);
-            });
-        });
-
-        // Ставки рулетки
-        document.querySelectorAll('#rouletteBetGrid .bet-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                placeRouletteBet(btn.dataset.type);
-            });
-        });
-
-        document.getElementById('rouletteBtnNumber').addEventListener('click', () => {
-            const num = parseInt(rouletteNumberInput.value, 10);
-            if (isNaN(num) || num < 0 || num > 36) {
-                showToast('Введите число от 0 до 36');
-                return;
-            }
-            placeRouletteBet(`number:${num}`);
-        });
-
-        // Таймер обратного отсчёта
-        setInterval(() => {
-            if (rouletteState.state === 'betting' && rouletteState.countdown > 0) {
-                rouletteState.countdown -= 1;
-                renderRouletteStatus();
-            }
-        }, 1000);
-
-        // Подключение к рулетке при открытии экрана
-        const originalNavigateToForRoulette = navigateTo;
-        navigateTo = function(screenId) {
-            originalNavigateToForRoulette(screenId);
-            if (screenId === 'roulette') {
-                setTimeout(() => {
-                    initRouletteCanvas();
-                    connectRouletteWs();
-                }, 50);
-            }
-        };
-
-        // Бесплатные монеты
-        async function claimCoins() {
-            claimBtn.disabled = true;
-            bonusClaimBtn.disabled = true;
+            plinkoLaunchBtn.disabled = true;
             try {
-                const result = await api('/api/user/claim', { method: 'POST' });
-                state.balance = result.balance;
+                const res = await api('/api/plinko/bet', {
+                    method: 'POST',
+                    body: JSON.stringify({ bet_amount: bet }),
+                });
+
+                state.balance = res.balance;
                 renderBalance();
-                showToast(`+${formatMoney(result.reward)} TSC начислено!`);
+
+                localBall.serverResult = res;
+
+                // Если шарик уже упал, сразу доводим до нужной лузы
+                if (localBall.settled) {
+                    settlePlinkoBall(localBall, plinkoState.balls.indexOf(localBall));
+                }
             } catch (err) {
-                showToast(err.message);
+                showToast(err.message || 'Ошибка Plinko');
+                // Возвращаем ставку, если неудачно
+                state.balance += bet;
+                renderBalance();
+                const idx = plinkoState.balls.indexOf(localBall);
+                if (idx >= 0) plinkoState.balls.splice(idx, 1);
             } finally {
-                claimBtn.disabled = false;
-                bonusClaimBtn.disabled = false;
+                plinkoLaunchBtn.disabled = false;
             }
         }
 
-        claimBtn.addEventListener('click', claimCoins);
-        bonusClaimBtn.addEventListener('click', claimCoins);
+        plinkoLaunchBtn.addEventListener('click', () => launchPlinko());
 
-        // История
-        async function loadHistory(gameType, container) {
-            try {
-                const params = gameType ? `?game_type=${gameType}` : '';
-                const history = await api(`/api/user/history${params}`);
-                renderHistory(container, history, 8);
-            } catch (err) { console.error(err); }
-        }
-
-        function renderHistory(container, history, limit) {
-            container.innerHTML = '<h3 style="color: var(--text-muted); font-size: 14px; margin-bottom: 10px;">История</h3>';
-            if (!history || !history.length) {
-                container.innerHTML += '<div class="history-item">Пока нет ставок</div>';
-                return;
-            }
-            history.slice(0, limit).forEach(item => {
-                const label = item.bet_type.startsWith('number:')
-                    ? `Число ${item.bet_type.split(':')[1]}`
-                    : (item.bet_type.startsWith('lucky:')
-                        ? `Lucky ${item.bet_type.split(':')[1]}`
-                        : (item.bet_type.startsWith('slots:')
-                            ? `Slots`
-                            : item.bet_type));
-                const div = document.createElement('div');
-                div.className = 'history-item';
-                div.innerHTML = `
-                    <span>${label}, ${formatMoney(item.bet_amount)} TSC</span>
-                    <span class="${item.is_win ? 'history-win' : 'history-loss'}">
-                        ${item.is_win ? '+' + formatMoney(item.win_amount) : '−' + formatMoney(item.bet_amount)}
-                    </span>
-                `;
-                container.appendChild(div);
+        plinkoChips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                plinkoChips.forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                plinkoChip = parseInt(chip.dataset.value, 10);
+                plinkoCurrentBetEl.textContent = formatMoney(plinkoChip);
             });
+        });
+
+        function addPlinkoHistory(result) {
+            const label = `Луза ${result.bucket_index + 1} — x${result.multiplier}`;
+            const net = result.win_amount - result.bet_amount;
+            const div = document.createElement('div');
+            div.className = 'history-item';
+            div.innerHTML = `
+                <span>${label}</span>
+                <span class="${net >= 0 ? 'history-win' : 'history-loss'}">${net >= 0 ? '+' : ''}${formatMoney(net)}</span>
+            `;
+            plinkoHistoryEl.insertBefore(div, plinkoHistoryEl.firstChild);
         }
+
+        // Lucky Jet — WebSocket Multiplayer Crash Game
 
         // Lucky Jet — WebSocket Multiplayer Crash Game
 
