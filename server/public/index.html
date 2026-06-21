@@ -1354,6 +1354,8 @@
 
         function updateDebugPanel(text) {
             console.log('Debug:', text);
+            const panel = document.getElementById('debugPanel');
+            if (panel) panel.textContent = 'Debug: ' + text;
         }
 
         // API
